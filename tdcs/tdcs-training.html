@@ -1,13 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
+
+<head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="ie=edge">
     <title>HTML 5 Boilerplate</title>
 
     <style>
-        
         body {
             background-color: black;
         }
@@ -23,11 +23,7 @@
             position: relative;
         }
 
-        .tankerbox {
-            background-color: rgba(0, 0, 255, 0.2);
-            border-radius: 100%;
-            position: absolute;
-        }
+       
 
         .hoverbox {
             background-color: rgba(0, 0, 0, 0.1);
@@ -40,64 +36,105 @@
             z-index: 100;
         }
 
+        .tankerbox {
+            background-color: rgba(0, 0, 255, 0.218);
+            border-radius: 100%;
+            position: absolute;
+        }
+
         .tankerbox:hover {
             background-color: rgba(0, 0, 255, 0.4);
             z-index: 100;
         }
 
-        .textbox{
+        .textbox {
             background-color: rgba(0, 0, 0, 0.6);
             color: white;
             z-index: 101;
             position: absolute;
             display: none;
-            padding: 1%;
+            padding-left: 5px;
+            padding-right: 5px;
             text-wrap: pretty;
+            width: 300px;
+            height: 450px;
         }
 
-        #tanker_box:hover + #tanker_box_text {
+        #textbox:hover{
             display: block;
         }
 
+        #tanker_box:hover+#tanker_box_text {
+            display: block;
+        }
     </style>
 
-    <script >
+    <script>
+        var activeElement = undefined
 
+        function moveElementWithMouse(mouseEvent) {
 
-        document.addEventListener("DOMContentLoaded", function(){
+            if (activeElement == undefined || activeElement == null)
+                return;
+
+            if (activeElement.classList.contains("top")) {
+                activeElement.style.top = mouseEvent.pageY + "px"
+            } else {
+                isBottom = true
+                var maxY = document.getElementById("boundingbox").offsetHeight 
+                activeElement.style.bottom = (maxY - (mouseEvent.pageY - 5)) + "px"
+            }
+
+            if (activeElement.classList.contains("left")) {
+                activeElement.style.left = mouseEvent.pageX + "px"
+            } else {
+                isRight = true
+                var maxX = document.getElementById("boundingbox").offsetWidth
+                activeElement.style.right = (maxX- (mouseEvent.pageX - 10))+ "px"
+            }
+        }
+
+        document.addEventListener("DOMContentLoaded", function () {
             const hoverclasses = document.getElementsByClassName("hoverbox");
             for (let i = 0; i < hoverclasses.length; i++) {
                 var element = document.getElementById(`${hoverclasses[i].id}_text`)
-                if(element === null || element === undefined){
+                if (element === null || element === undefined) {
                     continue;
-                }else{
+                } else {
                     console.log(element.id)
                     var rule = `#${hoverclasses[i].id}:hover + #${element.id}{ display: block; }`
                     document.styleSheets[0].insertRule(rule)
+
+                    hoverclasses[i].addEventListener("mouseover", function (src) {
+
+                        activeElement = document.getElementById(`${src.target.id}_text`);
+
+                    })
                 }
             }
+
+            document.addEventListener("mousemove", function (e) {
+                moveElementWithMouse(e);
+            });
+
         });
     </script>
 
-  </head>
-  <body>
-	
-    <div class="container">
+</head>
+
+<body>
+
+    <div class="container" id="boundingbox" style="overflow: hidden;">
         <img class="image" src="https://imgur.com/C89R8GN.png" />
-    
+
         <div id="aa_range_4" class="hoverbox" style="
             top: -2%; 
             left: 30.5%;
             width: 15%;
             height: 25%;">
         </div>
-        <div id="aa_range_4_text" class="textbox"
-        style="
-        top: 5%; 
-        left: 20%;
-        width: 10%;
-        height: 25%;">
-            <h4><u>A2A Range 4</u></h4>
+        <div id="aa_range_4_text" class="textbox top left">
+            <h4><u>AA Range 4</u></h4>
             <p>Something </p>
         </div>
 
@@ -106,28 +143,28 @@
         left: 43.5%;
         width: 12%;
         height: 22%;"></div>
-        <div id="ag_range_3_text" class="textbox"
-        style="
-        top: 20%; 
-        left: 32%;
-        width: 10%;
-        height: 25%;">
+        <div id="ag_range_3_text" class="textbox top left">
             <h4><u>AG Range 3</u></h4>
             <p>Something </p>
         </div>
 
-        
+        <div id="aa_range_3" class="hoverbox" style="
+        top: 25%; 
+        left: 30%;
+        width: 12%;
+        height: 22%;
+        background-color: rgba(0, 255, 0, 0.4);"></div>
+        <div id="aa_range_3_text" class="textbox top right">
+            <h4><u>AA Range 3</u></h4>
+            <p>Something </p>
+        </div>
+
         <div id="ag_range_2" class="hoverbox" style="
         top: 38%; 
         left: 47.5%;
         width: 4.5%;
         height: 8%;"></div>
-        <div id="ag_range_2_text" class="textbox"
-        style="
-        top: 38%; 
-        left: 35%;
-        width: 10%;
-        height: 25%;">
+        <div id="ag_range_2_text" class="textbox top left">
             <h4><u>AG Range 2</u></h4>
             <p>Something </p>
         </div>
@@ -137,12 +174,7 @@
         left: 70%;
         width: 10%;
         height: 17.5%;"></div>
-        <div id="multi_threat_text" class="textbox"
-        style="
-        top: 33%; 
-        left: 58%;
-        width: 10%;
-        height: 25%;">
+        <div id="multi_threat_text" class="textbox top right">
             <h4><u>Multi Threat Range</u></h4>
             <p>Something </p>
         </div>
@@ -152,28 +184,17 @@
         left: 57%;
         width: 9%;
         height: 11%;"></div>
-         <div id="aa_range_1_text" class="textbox"
-         style="
-         top: 50%; 
-         left: 45%;
-         width: 10%;
-         height: 25%;">
-             <h4><u>AA Range 1</u></h4>
-             <p>Something </p>
-         </div>
+        <div id="aa_range_1_text" class="textbox bottom right">
+            <h4><u>AA Range 1</u></h4>
+            <p>Something </p>
+        </div>
 
-
-        <div id="tanker_box" class="tankerbox" style="
+        <div id="tanker_box" class="hoverbox tankerbox" style="
         top: 55%; 
         left: 52%;
         width: 10%;
         height: 20%;"></div>
-        <div id="tanker_box_text" class="textbox"
-        style="
-        top: 60%; 
-        left: 40%;
-        width: 10%;
-        height: 25%;">
+        <div id="tanker_box_text" class="textbox bottom right">
             <h4><u>Tanker Box</u></h4>
             <p>Something </p>
         </div>
@@ -183,20 +204,23 @@
         left: 62%;
         width: 3%;
         height: 3%;"></div>
-        <div id="ag_range_1_text" class="textbox"
-        style="
-        top: 63%; 
-        left: 50%;
-        width: 10%;
-        height: 25%;">
-            <h4><u>Tanker Box</u></h4>
+        <div id="ag_range_1_text" class="textbox bottom right">
+            <h4><u>AG Range 1</u></h4>
             <p>Something </p>
         </div>
-        
-    </div>
+
+        <div id="naval_range_1" class="hoverbox" style="
+         top: 55%; 
+        left: 25%;
+        width: 12%;
+        height: 28%;"></div>
+        <div id="naval_range_1_text" class="textbox bottom right">
+            <h4><u>Naval Range 2</u></h4>
+            <p>Something </p>
+        </div>
 
     </div>
-    
-    
-  </body>
+
+</body>
+
 </html>
