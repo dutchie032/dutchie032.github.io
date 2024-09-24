@@ -100,6 +100,43 @@ customElements.define('markdown-style', MarkdownStyle);</script><markdown-style 
     </p>
     <h2 id="get-started"><a class="anchor" aria-hidden="true" tabindex="-1" href="#get-started"><span class="octicon octicon-link"></span></a>Get Started</h2>
     <p>This page will give you a detailed overview of all options, moving parts and logic that goes into Spearhead.<br>If you however want to go right to the Get Started guide click here: <a href="./GetStarted.html#completion">here</a><br>You can always come back later here.<br>The Get Started guide will not show all details and reasoning.<br></p>
+    <h2 id="stage"><a class="anchor" aria-hidden="true" tabindex="-1" href="#stage"><span class="octicon octicon-link"></span></a>Stage</h2>
+    <p>A stage is a logical part of a mission. It's isn't anything special per se, but everything revolves around stages in Spearhead.<br>Everything is tied to at a stage.<br>A</p>
+    <h3 id="completion"><a class="anchor" aria-hidden="true" tabindex="-1" href="#completion"><span class="octicon octicon-link"></span></a>Completion</h3>
+    <h3 id="on-completion"><a class="anchor" aria-hidden="true" tabindex="-1" href="#on-completion"><span class="octicon octicon-link"></span></a>On Completion</h3>
+    <h2 id="mission"><a class="anchor" aria-hidden="true" tabindex="-1" href="#mission"><span class="octicon octicon-link"></span></a>Mission</h2>
+    <p>A mission is a completable objective with a state and a continuous check to see if itself is completed.<br>The delay between checks is quite big, but it also is checked on unit deaths and other events.</p>
+    <h3 id="placement"><a class="anchor" aria-hidden="true" tabindex="-1" href="#placement"><span class="octicon octicon-link"></span></a>Placement</h3>
+    <p>The placement of MISSION trigger zones can be anywhere.<br>The order of unit detection is <code>CAP</code> > <code>MISSION</code> > <code>AIRBASE</code> > <code>STAGE</code><br>This means that if a unit has a name that starts with <code>"CAP_"</code> it will not be included in a mission.<br>But all other units in a <code>MISSION</code> trigger zone will be managed as part of that mission.</p>
+    <p>Units inside a <code>MISSION</code> do not have to stay within the triggerzone.<br>They just need to be inside the zone at the start of the mission.<br>You can for example let a <code>BAI</code> mission drive back and forth between airbases. The <code>MISSIONZONE</code> only needs to be around the units that are part of the objective, not the waypoints.</p>
+    <h3 id="naming"><a class="anchor" aria-hidden="true" tabindex="-1" href="#naming"><span class="octicon octicon-link"></span></a>Naming</h3>
+    <p><code>MISSION_&#x3C;type>_&#x3C;name></code><br><code>RANDOMMISSION_&#x3C;type>_&#x3C;name>_&#x3C;index></code> (Read RANDOMISATION below)</p>
+    <p>With:<br><code>name</code> = A name that is easy to remember and type. Like a codename. Exmaples: BYRON, PLUKE, etc.<br><code>type</code> = any of the below described types. Special types are marked with an *</p>
+    <p>TIP: You can click on the type to get more details</p>
+    <details>
+      <summary>SAM*</summary>  SAM Sites are managed a little different. SAM Sites can be used to guide players and to protect airfields.<br>  In the future when deepstrike missions might come into scope these SAM sites will also be more important.<br>  SAM sites will be activated when a zone is "Pre-Active".<br>  A stage is "Pre-Active" when there is a CAP base active, or there is other things to do that would need the SAM site to be live (OCA, DEEPSTRIKE, EXTRACTION \&#x3C;= all feature development)<br>  If you want a SAM site to become active ONLY when the stage is fully active, then `DEAD` is the type for you!
+      <p>  <u>Completion logic</u><br>  TODO: documentation: Completion logic</p>
+    </details>
+    <details>
+      <summary>DEAD</summary>
+      <p>  DEAD missions will be spawned on activation of the stage.<br>  ALL DEAD missions will be activated right at the start of a stage.<br>  This might be against the "randomisation" feel, but it is to make sure mission don't get activated randomly and players get ambushed by a random spawn.<br></p>
+      <p>  <u>Completion logic</u><br>  TODO: documentation: Completion logic</p>
+    </details>
+    <details>
+      <summary>BAI</summary>
+    </details>
+    <details>
+      <summary>STRIKE</summary>  STRIKE missions will be activated randomly until all of them are completed.<br>  A strike mission can be placed anywhere, even on airbases
+      <p>  <u>Completion logic</u><br>  TODO: documentation: Completion logic</p>
+    </details>
+    <h3 id="randomisation"><a class="anchor" aria-hidden="true" tabindex="-1" href="#randomisation"><span class="octicon octicon-link"></span></a>Randomisation</h3>
+    <p>You can randomize missions.<br>Spearhead will pick up all mission zones that start with <code>"RANDOMMISSION_"</code><br>Then it will combine each <code>RANDOMMISSION</code> in a zone with the same <code>&#x3C;name></code> and pick a random one.<br>It will always pick 1 and only 1.</p>
+    <p>This means you have some options for randomisation.<br>For example, if you have 1 missionzone with name <code>RANDOMMISSION_SAM_PLUKE_1</code> that is filled with an SA-2 and another zone with <code>RANDOMMISSION_SAM_PLUKE_2</code> filled with an SA-3 then some runs of the mission it will spawn an SA-3 and sometimes spawn an SA-3. (works for any mission type)</p>
+    <p>
+      What you can also do is add empty <code>RANDOMMISSION_</code> zones next to the filled <code>RANDOMMISSION_</code> zone.
+      For example. You have a <code>RANDOMMISSION_DEAD_BYRON_1</code> filled with an SA-19 driving around and 2 more <code>RANDOMMISSION_DEAD_BYRON_&#x3C;2 &#x26; 3></code> zones then it will have a 33% chance of being spawned.
+      If a zone is empty it will not be briefed, activated or count towards completion of the <code>STAGE</code>
+    </p>
   <style>markdown-style pre .copied {
   display: flex;
   position: absolute;
