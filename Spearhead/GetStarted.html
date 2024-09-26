@@ -94,11 +94,26 @@ customElements.define('markdown-style', MarkdownStyle);</script><markdown-style 
     <h1 id="spearhead"><a class="anchor" aria-hidden="true" tabindex="-1" href="#spearhead"><span class="octicon octicon-link"></span></a>Spearhead</h1>
     <h2 id="get-started"><a class="anchor" aria-hidden="true" tabindex="-1" href="#get-started"><span class="octicon octicon-link"></span></a>Get Started</h2>
     <p>This guide is to get you started building your first Spearhead mission.<br>Spearhead was created to enable the mission maker to worry as little about the running, timing and scripting and most about the setting and looks and feel of the mission.<br></p>
+    <p>In the example we'll show how you can create a simple island hopping mission</p>
     <h2 id="include-script"><a class="anchor" aria-hidden="true" tabindex="-1" href="#include-script"><span class="octicon octicon-link"></span></a>Include Script</h2>
     <p>
       Firstly include the script.
       TODO: include link to release.
     </p>
+    <h2 id="stages"><a class="anchor" aria-hidden="true" tabindex="-1" href="#stages"><span class="octicon octicon-link"></span></a>Stages</h2>
+    <p>So first of all think about the stages. Read the details about them here: <a href="./Reference.html#stage">Stages</a><br>These are logically ordered zones that will activate one by one based on the mission status in them.<br>There is a little more to it, but you'll find out.<br></p>
+    <p>Stages need to be named according to the convention: <code>MISSIONSTAGE_&#x3C;OrderNumber>_&#x3C;FreeForm></code><br>The first stage will be called <code>MISSIONSTAGE_1</code> or <code>MISSIONSTAGE_1_EAST</code> for example.<br></p>
+    <p>For this mission we started with the three stages: <code>MISSIONSTAGE_1_GROUND</code>, <code>MISSIONSTAGE_1_WATER</code> and <code>MISSIONSTAGE_2_AIRBASE</code> as you see in the image.<br>
+      <img src="img/starting_stages.png" alt="drawing" width="1000">
+    </p>
+    <p>In this example <code>_GROUND</code> and <code>_WATER</code> stages will be actived at the start of the mission.<br><code>_AIRBASE</code> will however not be activated since the order number is 2<br><code>MISSIONSTAGE_3</code> will be used as part of this example as well. It's a stage even further away.<br></p>
+    <h2 id="setting-up-cap"><a class="anchor" aria-hidden="true" tabindex="-1" href="#setting-up-cap"><span class="octicon octicon-link"></span></a>Setting up CAP</h2>
+    <p>If you don't want to use the CAP managers withing Spearhead you can skip this and continue to <a href="#setting-up-the-missions">setting up the missions</a>.<br>However CAP is one of the painpoints in a lot of missions and setting up a dynamic feeling airspace can be quite the challenge.<br>With the CAP managers we've tried to make this a lot easier.<br></p>
+    <p>A CAP group needs to follow the following naming convention: <code>CAP_&#x3C;A|B>&#x3C;CONFIG>_&#x3C;Free Form></code></p>
+    <p>For details on config read this: <a href="./Reference.html#cap-group-config">CAP Group Config</a></p>
+    <img src="img/starting_stages.png" alt="drawing" width="35%">
+    <img src="img/starting_stages.png" alt="drawing" width="35%"><br>
+    <h2 id="setting-up-the-missions"><a class="anchor" aria-hidden="true" tabindex="-1" href="#setting-up-the-missions"><span class="octicon octicon-link"></span></a>Setting up the missions</h2>
   <style>markdown-style pre .copied {
   display: flex;
   position: absolute;
