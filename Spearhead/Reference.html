@@ -101,9 +101,7 @@ customElements.define('markdown-style', MarkdownStyle);</script><markdown-style 
     <h2 id="get-started"><a class="anchor" aria-hidden="true" tabindex="-1" href="#get-started"><span class="octicon octicon-link"></span></a>Get Started</h2>
     <p>This page will give you a detailed overview of all options, moving parts and logic that goes into Spearhead.<br>If you however want to go right to the Get Started guide click here: <a href="./GetStarted.html#completion">here</a><br>You can always come back later here.<br>The Get Started guide will not show all details and reasoning.<br></p>
     <h2 id="stage"><a class="anchor" aria-hidden="true" tabindex="-1" href="#stage"><span class="octicon octicon-link"></span></a>Stage</h2>
-    <p>A stage is a logical part of a mission. It's isn't anything special per se, but everything revolves around stages in Spearhead.<br>Everything is tied to at a stage.<br>A</p>
-    <h3 id="completion"><a class="anchor" aria-hidden="true" tabindex="-1" href="#completion"><span class="octicon octicon-link"></span></a>Completion</h3>
-    <h3 id="on-completion"><a class="anchor" aria-hidden="true" tabindex="-1" href="#on-completion"><span class="octicon octicon-link"></span></a>On Completion</h3>
+    <p>A stage is a logical part of a mission. It's isn't anything special per se, but everything revolves around stages in Spearhead.<br>Everything is tied to at a stage.<br></p>
     <h2 id="mission"><a class="anchor" aria-hidden="true" tabindex="-1" href="#mission"><span class="octicon octicon-link"></span></a>Mission</h2>
     <p>A mission is a completable objective with a state and a continuous check to see if itself is completed.<br>The delay between checks is quite big, but it also is checked on unit deaths and other events.</p>
     <h3 id="placement"><a class="anchor" aria-hidden="true" tabindex="-1" href="#placement"><span class="octicon octicon-link"></span></a>Placement</h3>
@@ -129,6 +127,8 @@ customElements.define('markdown-style', MarkdownStyle);</script><markdown-style 
       <summary>STRIKE</summary>  STRIKE missions will be activated randomly until all of them are completed.<br>  A strike mission can be placed anywhere, even on airbases
       <p>  <u>Completion logic</u><br>  TODO: documentation: Completion logic</p>
     </details>
+    <h3 id="tgt-targets"><a class="anchor" aria-hidden="true" tabindex="-1" href="#tgt-targets"><span class="octicon octicon-link"></span></a>TGT targets</h3>
+    <p>There is 2 ways a mission can complete which depends on the precense</p>
     <h3 id="randomisation"><a class="anchor" aria-hidden="true" tabindex="-1" href="#randomisation"><span class="octicon octicon-link"></span></a>Randomisation</h3>
     <p>You can randomize missions.<br>Spearhead will pick up all mission zones that start with <code>"RANDOMMISSION_"</code><br>Then it will combine each <code>RANDOMMISSION</code> in a zone with the same <code>&#x3C;name></code> and pick a random one.<br>It will always pick 1 and only 1.</p>
     <p>This means you have some options for randomisation.<br>For example, if you have 1 missionzone with name <code>RANDOMMISSION_SAM_PLUKE_1</code> that is filled with an SA-2 and another zone with <code>RANDOMMISSION_SAM_PLUKE_2</code> filled with an SA-3 then some runs of the mission it will spawn an SA-3 and sometimes spawn an SA-3. (works for any mission type)</p>
