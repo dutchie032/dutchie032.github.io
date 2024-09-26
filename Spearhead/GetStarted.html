@@ -111,8 +111,18 @@ customElements.define('markdown-style', MarkdownStyle);</script><markdown-style 
     <p>If you don't want to use the CAP managers withing Spearhead you can skip this and continue to <a href="#setting-up-the-missions">setting up the missions</a>.<br>However CAP is one of the painpoints in a lot of missions and setting up a dynamic feeling airspace can be quite the challenge.<br>With the CAP managers we've tried to make this a lot easier.<br></p>
     <p>A CAP group needs to follow the following naming convention: <code>CAP_&#x3C;A|B>&#x3C;CONFIG>_&#x3C;Free Form></code></p>
     <p>For details on config read this: <a href="./Reference.html#cap-group-config">CAP Group Config</a></p>
-    <img src="img/starting_stages.png" alt="drawing" width="35%">
-    <img src="img/starting_stages.png" alt="drawing" width="35%"><br>
+    <p>For now I set up 3 groups with the following names. <code>CAP_A[1]1_Rota1</code> , <code>CAP_A[1]1_Rota1-1</code> , <code>CAP_B[1]1_Rota1</code><br>The first two are marked with <code>A</code> and will therefore be primary CAP units. They will be scheduled and make up for the total count.<br>Meaning that for this airbase there is 2 CAP units max at a time flying out.<br>In this case all groups have <code>[1]1</code> in the name, (This would be the same as <code>[1]A</code>) which means that when stage 1 is active the groups will activate and fly out to stage 1.</p>
+    <p>I also set up a few groups further back. One example: <code>CAP_A[1-3]3_Group1</code>. This group will protect zone 3 when zones 1 through 3 are active.</p>
+    <p>CAP units fly out, fly their CAP zone for x amount of minutes and will then RTB.<br>Before they actually RTB an event is triggered 10 minutes before the actual RTB task. This event will trigger a backup unit to startup and fly out to take over.<br></p>
+    <p>Best is to test it out and see for yourself.<br></p>
+    <h3 id="creating-cap-routes"><a class="anchor" aria-hidden="true" tabindex="-1" href="#creating-cap-routes"><span class="octicon octicon-link"></span></a>Creating CAP routes</h3>
+    <p>Creating cap routes is not needed per se, but with a multi-stage stage (we have 2 stages with <code>_1_</code>) it is recommended.<br>Similarly with huge stages.<br>If there is multiple zones is will "round-robin" over them.<br></p>
+    <p>If no CAP route is present the unit will fly a route generated differently per zone:<br><code>quad zone</code> => race-track between the corner closest to the origin airbase to the center point of the zone<br><code>circle zone</code> => race-track between the closest point on circle to the origin airbase to the center<br></p>
+    <p>If you want to create you own CAP Routes you can!<br>For this example I created 2 CAP routes inside of the 2 <code>_1_</code> stages.<br></p>
+    <p>As you can see below there's a nice quick you can exploit. As long as the <code>X</code> of the zone is inside of the the <code>CAPROUTE</code> will be used!</p>
+    <p>
+      <img src="./img/cap_routes.png" alt="CAP Routes Image">
+    </p>
     <h2 id="setting-up-the-missions"><a class="anchor" aria-hidden="true" tabindex="-1" href="#setting-up-the-missions"><span class="octicon octicon-link"></span></a>Setting up the missions</h2>
   <style>markdown-style pre .copied {
   display: flex;
