@@ -1,3 +1,4 @@
+do --spearhead_base.lua
 
 --- DEFAULT Values
 if Spearhead == nil then Spearhead = {} end
@@ -1620,6 +1621,9 @@ Spearhead.LoadingDone = function()
 
     loadDone = true
 end
+
+end --spearhead_base.lua
+do --spearhead_db.lua
 -- 3
 
 local SpearheadDB = {}
@@ -2238,6 +2242,1534 @@ do -- DB
 end
 
 Spearhead.DB = SpearheadDB
+
+end --spearhead_db.lua
+do --Mission.lua
+
+--- A mission Object.
+local Mission = {}
+do -- INIT Mission Class
+
+    local MINIMAL_UNITS_ALIVE_RATIO = 0.20
+
+    local Defaults = {}
+    Defaults.MainMenu = "Missions"
+    Defaults.SelectMenuSubMenus = { Defaults.MainMenu, "Select Mission" }
+    Defaults.ShowMissionSubs = { Defaults.MainMenu }
+
+    local PlayersInMission = {}
+    local MissionType = {
+        UNKNOWN = 0,
+        STRIKE = 1,
+        BAI = 2,
+        DEAD = 3,
+        SAM = 4,
+    }
+
+    do --INIT MISSION TYPE FUNCTIONS
+        ---Parse string to mission type
+        ---@param input string
+        MissionType.Parse = function(input)
+            if input == nil then
+                return Mission.MissionType.UNKNOWN
+            end
+
+            input = string.lower(input)
+            if input == "dead" then return MissionType.DEAD end
+            if input == "strike" then return MissionType.STRIKE end
+            if input == "bai" then return MissionType.BAI end
+            if input == "sam" then return MissionType.SAM end
+            return Mission.MissionType.UNKNOWN
+        end
+
+        ---comment
+        ---@param input number missionType
+        ---@return string text
+        MissionType.toString = function(input)
+            if input == MissionType.DEAD then return "DEAD" end
+            if input == MissionType.STRIKE then return "STRIKE" end
+            if input == MissionType.BAI then return "BAI" end
+            if input == MissionType.SAM then return "SAM" end
+            return "?"
+        end
+    end
+    Mission.MissionType = MissionType
+
+    Mission.MissionState = {
+        NEW = 0,
+        ACTIVE = 1,
+        COMPLETED = 2,
+    }
+
+    ---comment
+    ---@param missionZoneName string missionZoneName
+    ---@param database table db dependency injection
+    ---@return table?
+    function Mission:new(missionZoneName, database, logger)
+        local o = {}
+        setmetatable(o, { __index = self })
+
+        local function ParseGroupName(input)
+            local split_name = Spearhead.Util.split_string(input, "_")
+            local split_length = Spearhead.Util.tableLength(split_name)
+            if Spearhead.Util.startswith(input, "RANDOMMISSION") == true and split_length < 4 then
+                Spearhead.AddMissionEditorWarning("Random Mission with zonename " .. input .. " not in right format")
+                return nil
+            elseif split_length < 3 then
+                Spearhead.AddMissionEditorWarning("Mission with zonename" .. input .. " not in right format")
+                return nil
+            end
+            local type = split_name[2]
+            local parsedType = Mission.MissionType.Parse(type)
+    
+            if parsedType == nil then
+                Spearhead.AddMissionEditorWarning("Mission with zonename '" .. input .. "' has an unsupported type '" .. (type or "nil" ))
+                return nil
+            end
+            local name = split_name[3]
+            return {
+                missionName = name,
+                type = parsedType
+            }
+        end
+
+        local parsed = ParseGroupName(missionZoneName)
+        if parsed == nil then return nil end
+
+        o.missionZoneName = missionZoneName
+        o.database = database
+        o.groupNames = database:getGroupsForMissionZone(missionZoneName)
+        o.name = parsed.missionName
+        o.missionType = parsed.type
+        o.missionTypeDisplayName = Mission.MissionType.toString(o.missionType)
+        o.startingGroups = Spearhead.Util.tableLength(o.groupNames)
+        o.missionState = Mission.MissionState.NEW
+        o.missionbriefing = database:GetDescriptionForMission(missionZoneName)
+        o.startingUnits = 0
+        o.logger = logger
+        o.code = database:GetNewMissionCode()
+
+        o.groupNamesPerUnit = {}
+
+        o.groupUnitAliveDict = {}
+        o.targetAliveStates = {}
+        o.hasSpecificTargets = false
+
+        local CheckStateAsync = function (self, time)
+            self:CheckAndUpdateSelf()
+            return nil
+        end
+
+        o.OnUnitLost = function(self, object)
+            --[[
+                OnUnit lost event
+            ]]--
+            self.logger:debug("Getting on unit lost event")
+
+            local category = Object.getCategory(object)
+            if category == Object.Category.UNIT then
+                local unitName = object:getName()
+                self.logger:debug("UnitName:" .. unitName)
+                local groupName = self.groupNamesPerUnit[unitName]
+                self.groupUnitAliveDict[groupName][unitName] = false
+
+                if self.targetAliveStates[groupName][unitName] then
+                    self.targetAliveStates[groupName][unitName] = false
+                end
+            elseif category == Object.Category.STATIC  then
+                local name = object:getName()
+                self.groupUnitAliveDict[name][name] = false
+
+                self.logger:debug("Name " .. name)
+
+                if self.targetAliveStates[name][name] then
+                    self.targetAliveStates[name][name] = false
+                end
+            end
+            timer.scheduleFunction(CheckStateAsync, self, timer.getTime() + 3)
+        end
+
+        o.MissionCompleteListeners = {}
+        ---comment
+        ---@param self table
+        ---@param listener table Object that implements "OnMissionComplete(self, mission)"
+        o.AddMissionCompleteListener = function(self, listener)
+            if type(listener) ~= "table" then
+                return
+            end
+            
+            table.insert(self.MissionCompleteListeners, listener)
+        end
+
+        local TriggerMissionComplete = function(self)
+            for _, callable in pairs(self.MissionCompleteListeners) do
+                local succ, err = pcall( function() 
+                    callable:OnMissionComplete(self)
+                end)
+                if err then
+                    self.logger:warn("Error in misstion complete listener:" .. err)
+                end
+            end
+        end
+
+
+        local StartCheckingAndUpdateSelfContinuous = function (self)
+            local CheckAndUpdate = function(self, time)
+                self:CheckAndUpdateSelf(true)
+                if self.missionState == Mission.MissionState.COMPLETED or self.missionState == Mission.MissionState.NEW then
+                    return nil
+                else
+                    return time + 60
+                end
+            end
+
+            timer.scheduleFunction(CheckAndUpdate, self, timer.getTime() + 300)
+        end
+
+        local CleanupDelayedAsync = function (self, time)
+            self:Cleanup()
+            return nil
+        end
+
+        ---comment
+        ---@param self table
+        ---@param checkUnitHealth boolean?
+        o.CheckAndUpdateSelf = function(self, checkUnitHealth)
+            if not checkUnitHealth then checkUnitHealth = false end
+
+            if self.missionState == Mission.MissionState.COMPLETED then
+                return
+            end
+
+            if self.hasSpecificTargets == true then
+                local specificTargetsAlive = false
+                for groupName, unitNameDict in pairs(self.targetAliveStates) do
+                    for unitName, isAlive in pairs(unitNameDict) do
+                        if isAlive == true then
+                            specificTargetsAlive = true
+                        end
+                    end
+                end
+                if specificTargetsAlive == false then
+                    self.missionState = Mission.MissionState.COMPLETED
+                end
+            else
+                local function CountAliveGroups()
+                    local aliveGroups = 0
+
+                    for _, group in pairs(self.groupUnitAliveDict) do
+                        local groupTotal = 0
+                        local groupDeath = 0
+                        for _, isAlive in pairs(group) do
+                            if isAlive ~= true then
+                                groupDeath = groupDeath + 1
+                            end
+                            groupTotal = groupTotal + 1
+                        end
+
+                        local aliveRatio = (groupTotal - groupDeath) / groupTotal
+                        if aliveRatio >= MINIMAL_UNITS_ALIVE_RATIO then
+                            aliveGroups = aliveGroups + 1
+                        end
+                    end
+
+                    return aliveGroups
+                end
+                
+                if self.missionType == Mission.MissionType.STRIKE then --strike targets should normally have TGT targets
+                    if CountAliveGroups() == 0 then
+                        self.missionState = Mission.MissionState.COMPLETED
+                    end
+                elseif self.missionType == Mission.MissionType.BAI then
+                    if CountAliveGroups() == 0 then
+                        self.missionState = Mission.MissionState.COMPLETED
+                    end
+                end
+                --[[
+                    TODO: Other checks for mission complete 
+                ]]
+            end
+
+            if self.missionState == Mission.MissionState.COMPLETED then
+                self.logger:debug("Mission complete " .. self.name)
+                trigger.action.outText("Mission " .. self.name .. " (" .. self.code .. ") was completed succesfully!", 20)
+
+                TriggerMissionComplete(self)
+                --Schedule cleanup after 5 minutes of mission complete
+                --timer.scheduleFunction(CleanupDelayedAsync, self, timer.getTime() + 300)
+            end
+        end
+
+        ---Activates groups for this mission
+        ---@param self table
+        o.Activate = function(self)
+            if self.missionState == Mission.MissionState.ACTIVE then
+                return
+            end
+
+            self.missionState = Mission.MissionState.ACTIVE
+            do --spawn groups
+                for key, groupname in pairs(self.groupNames) do
+                    Spearhead.DcsUtil.SpawnGroupTemplate(groupname)
+                end
+            end
+
+            StartCheckingAndUpdateSelfContinuous(self)
+        end
+
+        local ToStateString = function(self)
+            if self.hasSpecificTargets then
+                local dead = 0
+                local total = 0
+                for _, group in pairs(self.targetAliveStates) do
+                    for _, isAlive in pairs(group) do
+                        total = total + 1
+                        if isAlive == false then
+                            dead = dead + 1
+                        end
+                    end
+                end
+                local completionPercentage = math.floor((dead / total) * 100)
+                return "Targets Destroyed: " .. completionPercentage .. "%"
+            else
+                local dead = 0
+                local total = 0
+                for _, group in pairs(self.targetAliveStates) do
+                    for _, isAlive in pairs(group) do
+                        total = total + 1
+                        if isAlive == false then
+                            dead = dead + 1
+                        end
+                    end
+                end
+
+                local completionPercentage = math.floor((dead / total) * 100)
+                return "Targets Destroyed: " .. completionPercentage .. "%"
+            end
+        end
+
+        o.ShowBriefing = function(self, groupId)
+            local stateString = ToStateString(self)
+
+            if self.missionbriefing == nil then self.missionbriefing = "No briefing available" end
+            local text = "Mission [" .. self.code .. "] ".. self.name .. "\n \n" .. self.missionbriefing .. " \n \n" .. stateString
+            trigger.action.outTextForGroup(groupId, text, 30);
+        end
+
+        o.Cleanup = function(self)
+            for key, groupName in pairs(self.groupNames) do
+                Spearhead.DcsUtil.DestroyGroup(groupName)
+            end
+        end
+
+        local Init = function(self)
+            for key, group_name in pairs(self.groupNames) do
+
+                self.groupUnitAliveDict[group_name] = {}
+                self.targetAliveStates[group_name] = {}
+
+                if Spearhead.DcsUtil.IsGroupStatic(group_name) then
+                    Spearhead.Events.addOnUnitLostEventListener(group_name, self)
+
+                    if Spearhead.Util.startswith(group_name, "TGT_") == true then
+                        self.targetAliveStates[group_name][group_name] = true
+                    end
+                else
+                    local group = Group.getByName(group_name)
+                    local isGroupTarget = Spearhead.Util.startswith(group_name, "TGT_")
+
+                    self.startingUnits = self.startingUnits + group:getInitialSize()
+                    for _, unit in pairs(group:getUnits()) do
+                        local unitName = unit:getName()
+
+                        self.groupNamesPerUnit[unitName] = group_name
+
+                        Spearhead.Events.addOnUnitLostEventListener(unitName, self)
+                        self.groupUnitAliveDict[group_name][unitName] = true
+
+                        if isGroupTarget == true or Spearhead.Util.startswith(unitName, "TGT_") == true then
+                            self.targetAliveStates[group_name][unitName] = true
+                        end
+
+                        if self.missionType == MissionType.DEAD or self.missionType == MissionType.SAM then
+                            local desc = unit:getDesc()
+                            local attributes = desc.attributes
+                            if attributes["SAM"] == true or attributes["SAM TR"] or attributes["AAA"] then
+                                self.targetAliveStates[group_name][unitName] = true
+                            end
+                        end
+                    end
+                end
+            end
+
+            if Spearhead.Util.tableLength(self.targetAliveStates) > 0 then
+                self.hasSpecificTargets = true
+            end
+        end
+
+        Init(o)
+        return o;
+    end
+end
+
+if not Spearhead.internal then Spearhead.internal = {} end
+Spearhead.internal.Mission = Mission
+end --Mission.lua
+do --Stage.lua
+
+local Stage = {}
+do --init STAGE DIRECTOR
+
+
+    local stageDrawingId = 0
+
+    ---comment
+    ---@param stagezone_name string
+    ---@param database table
+    ---@param logger table
+    ---@return table?
+    function Stage:new(stagezone_name, database, logger, stageConfig)
+        local o = {}
+        setmetatable(o, { __index = self })
+
+        o.zoneName = stagezone_name
+
+        local split = Spearhead.Util.split_string(stagezone_name, "_")
+        if Spearhead.Util.tableLength(split) < 2 then
+            Spearhead.AddMissionEditorWarning("Stage zone with name " .. stagezone_name .. " does not have a order number or valid format")
+            return nil
+        end
+
+        local orderNumber = tonumber(split[2])
+        if orderNumber == nil then
+            Spearhead.AddMissionEditorWarning("Stage zone with name " .. stagezone_name .. " does not have a valid order number : " .. split[2])
+            return nil
+        end
+
+        o.stageNumber = orderNumber
+        o.database = database
+        o.logger = logger
+        o.db = {}
+        o.db.missionsByCode = {}
+        o.db.missions = {}
+        o.db.sams = {}
+        o.db.redAirbasegroups = {}
+        o.db.blueAirbasegroups = {}
+        o.db.airbaseIds = {}
+        o.db.farps = {}
+        o.activeStage = 0
+        o.preActivated = false
+        o.stageConfig = stageConfig or {}
+        o.stageDrawingId = stageDrawingId + 1
+
+        stageDrawingId = stageDrawingId + 1
+
+        do --Init Stage
+            logger:info("Initiating new Stage with name: " .. stagezone_name)
+
+            local missionZones = database:getMissionsForStage(stagezone_name)
+            for _, missionZone in pairs(missionZones) do
+                local mission = Spearhead.internal.Mission:new(missionZone, database, logger)
+                if mission then
+                    o.db.missionsByCode[mission.code] = mission
+                    if mission.missionType == Spearhead.internal.Mission.MissionType.SAM then
+                        table.insert(o.db.sams, mission)
+                    else
+                        table.insert(o.db.missions, mission)
+                    end
+                end
+            end
+
+            local randomMissionNames = database:getRandomMissionsForStage(stagezone_name)
+
+            local randomMissionByName = {}
+            for _, missionZoneName in pairs(randomMissionNames) do
+                local mission = Spearhead.internal.Mission:new(missionZoneName, database, logger)
+                if mission then
+                    if randomMissionByName[mission.name] == nil then
+                        randomMissionByName[mission.name] = {}
+                    end
+                    table.insert(randomMissionByName[mission.name], mission)
+                end
+            end
+
+            for _, missions in pairs(randomMissionByName) do
+                local mission = Spearhead.Util.randomFromList(missions)
+                if mission then
+                    o.db.missionsByCode[mission.code] = mission
+                    if mission.missionType == Spearhead.internal.Mission.MissionType.SAM then
+                        table.insert(o.db.sams, mission)
+                    else
+                        table.insert(o.db.missions, mission)
+                    end
+                end
+            end
+
+            local airbaseIds = database:getAirbaseIdsInStage(o.zoneName)
+            if airbaseIds ~= nil and type(airbaseIds) == "table" then
+                o.db.airbaseIds = airbaseIds
+                for _, airbaseId in pairs(airbaseIds) do
+                    
+                    for _, groupName in pairs(database:getRedGroupsAtAirbase(airbaseId)) do 
+                        table.insert(o.db.redAirbasegroups, groupName)
+                    end
+
+                    for _, groupName in pairs(database:getBlueGroupsAtAirbase(airbaseId)) do 
+                        table.insert(o.db.blueAirbasegroups, groupName)
+                    end
+                end
+            end
+
+            local farps = database:getFarpZonesInStage(o.zoneName)
+            if farps ~= nil and type(farps) == "table" then o.db.farps = farps end
+        end
+
+        o.IsComplete = function(self)
+            for i, mission in pairs(self.db.missions) do
+                local state = mission:GetState()
+                if state == Spearhead.Mission.MissionState.ACTIVE or state == Spearhead.Mission.MissionState.NEW then
+                    return false
+                end
+            end
+            return true
+        end
+
+        ---Activates all SAMS, Airbase units etc all at once.
+        ---@param self table
+        o.PreActivate = function(self)
+            if self.preActivated == false then
+                self.preActivated = true
+                for key, mission in pairs(self.db.sams) do
+                    if mission and mission.Activate then
+                        mission:Activate()
+                    end
+                end
+                self.logger:debug("Pre-activating stage with airbase groups amount: " .. Spearhead.Util.tableLength(self.db.redAirbasegroups))
+
+                for _ , groupName in pairs(self.db.redAirbasegroups) do
+                    Spearhead.DcsUtil.SpawnGroupTemplate(groupName)
+                end
+            end
+
+            if self.activeStage == self.stageNumber then
+                for _, mission in pairs(self.db.sams) do
+                    self:AddCommmandsForMissionToAllPlayers(mission)
+                end
+            end
+        end
+
+        local activateMissionsIfApplicableAsync = function(self)
+            self:ActivateMissionsIfApplicable(self)
+        end
+
+        o.MarkStage = function(self, blue)
+            local fillColor = {1, 0, 0, 0.1}
+            local line ={ 1, 0,0, 1 }
+            if blue == true then
+                fillColor = {0, 0, 1, 0.1}
+                line ={ 0, 0,1, 1 }
+            end
+
+            local zone = Spearhead.DcsUtil.getZoneByName(self.zoneName)
+            if zone then
+                self.logger:debug("drawing stage")
+                if zone.zone_type == Spearhead.DcsUtil.ZoneType.Cilinder then
+                    trigger.action.circleToAll(-1, self.stageDrawingId, {x = zone.x, y = 0 , z = zone.z}, zone.radius, {0,0,0,0}, {0,0,0,0},4, true)
+                else
+                    --trigger.action.circleToAll(-1, self.stageDrawingId, {x = zone.x, y = 0 , z = zone.z}, zone.radius, { 1, 0,0, 1 }, {1,0,0,1},4, true)
+                    trigger.action.quadToAll( -1, self.stageDrawingId,  zone.verts[2], zone.verts[1], zone.verts[4],  zone.verts[3], {0,0,0,0}, {0,0,0,0}, 4, true)
+                end
+
+                trigger.action.setMarkupColorFill(self.stageDrawingId, fillColor)
+                trigger.action.setMarkupColor(self.stageDrawingId, line)
+            end
+        end
+        
+        o.ActivateStage = function(self)
+            pcall(function()
+                self:MarkStage()
+            end)
+
+            self:PreActivate()
+            
+            local miscGroups = self.database:getMiscGroupsAtStage(self.zoneName)
+            self.logger:debug("Activating Misc groups for zone: " .. Spearhead.Util.tableLength(miscGroups))
+            for _, groupName in pairs(miscGroups) do
+                Spearhead.DcsUtil.SpawnGroupTemplate(groupName)
+            end
+
+            for _, mission in pairs(self.db.missions) do
+                if mission.missionType == Spearhead.internal.Mission.MissionType.DEAD then
+                    mission:Activate()
+                    self:AddCommmandsForMissionToAllPlayers(mission)
+                end
+            end
+            timer.scheduleFunction(activateMissionsIfApplicableAsync, self, timer.getTime() + 5)
+        end
+
+        o.ActivateMissionsIfApplicable = function (self)
+            local activeCount = 0 
+
+            local availableMissions = {}
+            for _, mission in pairs(self.db.missionsByCode) do
+                if mission.missionState == Spearhead.internal.Mission.MissionState.ACTIVE then
+                    activeCount = activeCount + 1
+                end
+
+                if mission.missionState == Spearhead.internal.Mission.MissionState.NEW then
+                    table.insert(availableMissions, mission)
+                end
+            end
+
+            local max = self.stageConfig.maxMissionsInStage or 10
+
+            local availableMissionsCount = Spearhead.Util.tableLength(availableMissions)
+            if activeCount < max and availableMissionsCount > 0  then
+                for i = activeCount+1, max do
+                    if availableMissionsCount == 0 then
+                        i = max+1 --exits this loop
+                    else
+                        local index = math.random(1, availableMissionsCount)
+                        local mission = table.remove(availableMissions, index)
+                        if mission then
+                            mission:Activate()
+                            self:AddCommmandsForMissionToAllPlayers(mission)
+                        end
+                        availableMissionsCount = availableMissionsCount - 1
+                    end
+                end
+            end
+        end
+
+        ---Cleans up all missions
+        ---@param self table
+        o.Clean = function(self)
+            for key, mission in pairs(self.db.missions) do
+                mission:Cleanup()
+            end
+
+            for key, samMission in pairs(self.db.sams) do
+                samMission:Cleanup()
+            end
+
+            for _, airbase in pairs(self.db.airbases) do
+                for _, redGroupName in pairs(airbase.redAirbaseGroupNames) do
+                    Spearhead.DcsUtil.DcsUtil.DestroyGroup(redGroupName)
+                end
+            end
+
+            logger:debug("'" .. Spearhead.Util.toString(self.zoneName) .. "' cleaned")
+        end
+
+        local ActivateBlueAsync = function(self)
+            pcall(function()
+                self:MarkStage(true)
+            end)
+
+            for key, airbaseId in pairs(self.db.airbaseIds) do
+                local airbase = Spearhead.DcsUtil.getAirbaseById(airbaseId)
+
+                if airbase then
+                    local startingCoalition = Spearhead.DcsUtil.getStartingCoalition(airbaseId)
+                    if startingCoalition == coalition.side.BLUE then
+                        airbase:setCoalition(2)
+                        for _, blueGroupName in pairs(self.db.blueAirbasegroups) do
+                            Spearhead.DcsUtil.SpawnGroupTemplate(blueGroupName)
+                        end
+                    else
+                        airbase:setCoalition(0)
+                    end
+                end
+            end
+        end
+
+        ---Sets airfields to blue and spawns friendly farps
+        o.ActivateBlueStage = function(self)
+            logger:debug("Setting stage '" .. Spearhead.Util.toString(self.zoneName) .. "' to blue")
+            
+            for _, groupName in pairs(self.db.redAirbasegroups) do
+                Spearhead.DcsUtil.DestroyGroup(groupName)
+            end
+
+            for _, mission in pairs(self.db.missions) do
+                mission:Cleanup()
+            end
+
+            for _, mission in pairs(self.db.sams) do
+                mission:Cleanup()
+            end
+
+            timer.scheduleFunction(ActivateBlueAsync, self, timer.getTime() + 3)
+
+            -- for key, farp in pairs(self.db.farps) do
+            --     if farp.helipadnames then
+            --         for _, helipadName in pairs(farp.helipadnames) do
+            --             local helipad = Airbase.getByName(helipadName)
+            --             if helipad then
+            --                 logger:debug("Enabling: '" .. helipad:getName() .. "'")
+            --                 helipad:setCoalition(2)
+            --             else
+            --                 logger:warn(helipadName .. " not found when spawning farps")
+            --             end
+            --         end
+            --     end
+
+            --     if farp.group_names then
+            --         for _, groupName in pairs(farp.group_names) do
+            --             Spearhead.DcsUtil.SpawnGroupTemplate(groupName)
+            --         end
+            --     end
+            -- end
+        end
+
+        o.OnStatusRequestReceived = function(self, groupId)
+            if self.activeStage ~= self.stageNumber then
+                return
+            end
+
+            trigger.action.outTextForGroup(groupId, "Status Update incoming... ", 3)
+
+            local text = "Mission Status: \n"
+
+            local  totalmissions = 0
+            local completedMissions = 0
+            for _, mission in pairs(self.db.missionsByCode) do
+                totalmissions = totalmissions + 1
+                if mission.missionState == Spearhead.internal.Mission.MissionState.ACTIVE then
+
+                    text = text .. "\n [" .. mission.code .. "] " .. mission.name .. 
+                    " ("  ..  mission.missionTypeDisplayName .. ") \n"
+                end
+               
+                if mission.missionState == Spearhead.internal.Mission.MissionState.COMPLETED then
+                    completedMissions = completedMissions + 1
+                end
+            end
+
+            local completionPercentage = math.floor((completedMissions / totalmissions) * 100)
+            text = text .. " \n Missions Complete: " .. completionPercentage .. "%" 
+
+            self.logger:debug(text)
+            trigger.action.outTextForGroup(groupId, text, 20)
+        end
+
+        o.OnStageNumberChanged = function (self, number)
+
+            if self.activeStage == number then --only activate once for a stage
+                return
+            end
+
+            local previousActive = self.activeStage
+            self.activeStage = number
+            if Spearhead.capInfo.IsCapActiveWhenZoneIsActive(self.zoneName, number) == true then
+                self:PreActivate()
+            end
+
+            if number == self.stageNumber then
+                self:ActivateStage()
+            end
+
+            if previousActive <= self.stageNumber then
+                if number > self.stageNumber then
+                    self:ActivateBlueStage()
+                    self:RemoveAllMissionCommands()
+                end
+            end
+        end
+
+        --- input = { self, groupId, missionCode }
+        local ShowBriefingClicked = function (input)
+            
+            local self = input.self
+            local groupId = input.groupId
+            local missionCode = input.missionCode
+
+            local mission  = self.db.missionsByCode[missionCode]
+            if mission then
+                mission:ShowBriefing(groupId)
+            end
+        end
+        
+        o.RemoveMissionCommands = function (self, mission)
+
+            self.logger:debug("Removing commands for: " .. mission.name)
+
+            local folderName = mission.name .. "(" .. mission.missionTypeDisplayName .. ")"
+            for i = 0, 2 do
+                local players = coalition.getPlayers(i)
+                for _, playerUnit in pairs(players) do
+                    local groupId = playerUnit:getGroup():getID()
+                    missionCommands.removeItemForGroup(groupId, { "Missions", folderName })
+                end
+            end
+        end
+
+        o.RemoveAllMissionCommands = function (self)
+            for _, mission in pairs(self.db.missionsByCode) do
+                self:RemoveMissionCommands(mission)
+            end
+        end
+
+        o.AddCommandsForMissionToGroup = function (self, groupId, mission)
+            local folderName = mission.name .. "(" .. mission.missionTypeDisplayName .. ")"
+            missionCommands.addSubMenuForGroup(groupId, folderName, { "Missions"} )
+            missionCommands.addCommandForGroup(groupId, "Show Briefing", { "Missions", folderName }, ShowBriefingClicked, { self = self, groupId = groupId, missionCode = mission.code })
+        end
+
+        o.AddCommmandsForMissionToAllPlayers = function(self, mission)
+            for i = 0, 2 do
+                local players = coalition.getPlayers(i)
+                for _, playerUnit in pairs(players) do
+                    local groupId = playerUnit:getGroup():getID()
+                    self:AddCommandsForMissionToGroup(groupId, mission)
+                end
+            end
+        end
+        
+        o.OnPlayerEntersUnit = function (self, unit)
+            if self.activeStage == self.stageNumber then
+                local groupId = unit:getGroup():getID()
+                for _, mission in pairs(self.db.missionsByCode) do
+                    if mission.missionState == Spearhead.internal.Mission.MissionState.ACTIVE then
+                        self:AddCommandsForMissionToGroup(groupId, mission)
+                    end
+                end
+            end
+        end
+
+        local removeMissionCommandsDelayed = function(input)
+            local self = input.self
+            local mission = input.mission
+            self:RemoveMissionCommands(mission)
+        end
+        
+        o.OnMissionComplete = function(self, mission)
+            timer.scheduleFunction(removeMissionCommandsDelayed, { self = self, mission = mission}, timer.getTime() + 20)
+            timer.scheduleFunction(activateMissionsIfApplicableAsync, self, timer.getTime() + 10)
+        end
+
+        for _, mission in pairs(o.db.missionsByCode) do
+            mission:AddMissionCompleteListener(o)
+        end
+
+        Spearhead.Events.AddOnStatusRequestReceivedListener(o)
+        Spearhead.Events.AddStageNumberChangedListener(o)
+        return o
+    end
+end
+
+if not Spearhead.internal then Spearhead.internal = {} end
+Spearhead.internal.Stage = Stage
+end --Stage.lua
+do --GlobalStageManager.lua
+
+
+local StagesByName = {}
+
+
+GlobalStageManager = {}
+GlobalStageManager.start = function (database, stageConfig)
+
+    for _, stageName in pairs(database:getStagezoneNames()) do
+
+        local logger = Spearhead.LoggerTemplate:new(stageName, stageConfig.logLevel)
+        local stage = Spearhead.internal.Stage:new(stageName, database, logger)
+
+        StagesByName[stageName]  = stage
+
+        local logger = Spearhead.LoggerTemplate:new("StageManager", stageConfig.logLevel)
+        logger:info("Initiated " .. Spearhead.Util.tableLength(StagesByName) .. " airbases for cap")
+
+    end
+end
+
+if not Spearhead.internal then Spearhead.internal = {} end
+Spearhead.internal.GlobalStageManager = GlobalStageManager
+
+end --GlobalStageManager.lua
+do --CapAirbase.lua
+
+local CapBase = {}
+
+---comment
+---@param airbaseId number
+---@param database table
+---@param logger table
+---@param capConfig table
+---@param stageConfig table
+---@return table
+function CapBase:new(airbaseId, database, logger, capConfig, stageConfig)
+    local o  = {}
+    setmetatable(o, { __index = self })
+
+    o.groupNames = database:getCapGroupsAtAirbase(airbaseId)
+    o.database  = database
+    o.airbaseId = airbaseId
+    o.logger = logger
+    o.activeStage = 0
+    o.capConfig = capConfig
+
+    if capConfig == nil then
+        capConfig = {}
+        table.insert(Spearhead.MissionEditingWarnings,"CapConfig is nil")
+    else
+        if capConfig.minSpeed == nil then Spearhead.MissionEditingWarnings("CapConfig.minSpeed is nil") end
+        if capConfig.maxSpeed == nil then Spearhead.MissionEditingWarnings("CapConfig.maxSpeed is nil") end
+        if capConfig.minAlt == nil then Spearhead.MissionEditingWarnings("CapConfig.minAlt is nil") end
+        if capConfig.maxAlt == nil then Spearhead.MissionEditingWarnings("CapConfig.maxAlt is nil") end
+        if capConfig.minDurationOnStation == nil then Spearhead.MissionEditingWarnings("CapConfig.minDurationOnStation is nil") end
+        if capConfig.maxDurationOnStation == nil then Spearhead.MissionEditingWarnings("CapConfig.maxDurationOnStation is nil") end
+        if capConfig.rearmDelay == nil then Spearhead.MissionEditingWarnings("CapConfig.rearmDelay is nil") end
+        if capConfig.deathDelay == nil then Spearhead.MissionEditingWarnings("CapConfig.deathDelay is nil") end
+    end
+
+    o.activeCapStages = (stageConfig or {}).capActiveStages or 10
+
+    o.lastStatesByName = {}
+    o.groupsByName = {}
+    o.PrimaryGroups = {}
+    o.BackupGroups = {}
+
+    local CheckReschedulingAsync = function(self, time)
+        self:CheckAndScheduleCAP()
+    end
+
+    o.OnGroupStateUpdated = function (self, capGroup)
+        --[[
+            There is no update needed for INTRANSIT, ONSTATION or REARMING as the PREVIOUS state already was checked and nothing changes in the actual overal state.
+        ]]--
+        if  capGroup.state == Spearhead.internal.CapGroup.GroupState.INTRANSIT 
+            or capGroup.state == Spearhead.internal.CapGroup.GroupState.ONSTATION 
+            or capGroup.state == Spearhead.internal.CapGroup.GroupState.REARMING
+        then
+            return
+        end
+        timer.scheduleFunction(CheckReschedulingAsync, self, timer.getTime() + 1)
+    end
+
+    for key, name in pairs(o.groupNames) do
+        local capGroup = Spearhead.internal.CapGroup:new(name, airbaseId, logger, database, capConfig)
+        if capGroup then
+            o.groupsByName[name] = capGroup
+
+            if capGroup.isBackup ==true then
+                table.insert(o.BackupGroups, capGroup)
+            else
+                table.insert(o.PrimaryGroups, capGroup)
+            end
+
+            capGroup:AddOnStateUpdatedListener(o)
+        end
+    end
+
+    o.SpawnIfApplicable = function(self)
+        self.logger:debug("Check spawns for airbase " .. self.airbaseId )
+        for groupName, capGroup in pairs(self.groupsByName) do
+            
+            local activeStage = tostring(self.activeStage)
+            local targetStage = capGroup:GetTargetZone(activeStage)
+
+            if targetStage ~= nil and capGroup.state == Spearhead.internal.CapGroup.GroupState.UNSPAWNED then
+                capGroup:SpawnOnTheRamp()
+            end
+        end
+    end
+
+    o.CheckAndScheduleCAP = function (self)
+
+        self.logger:debug("Check taskings for airbase " .. self.airbaseId )
+        
+        local countPerStage = {}
+        local requiredPerStage = {}
+
+        --Count back up groups that are active or reassign to the new zone if that's needed
+        for _, backupGroup in pairs(self.BackupGroups) do
+            if backupGroup.state == Spearhead.internal.CapGroup.GroupState.INTRANSIT or backupGroup.state == Spearhead.internal.CapGroup.GroupState.ONSTATION then
+                local supposedTargetStage = backupGroup:GetTargetZone(self.activeStage)
+                if supposedTargetStage then
+                    if supposedTargetStage ~= backupGroup.assignedStageNumber then
+                        backupGroup:SendToStage(supposedTargetStage)
+                    end
+    
+                    if countPerStage[supposedTargetStage] == nil then
+                        countPerStage[supposedTargetStage] = 0
+                    end
+                    countPerStage[supposedTargetStage] = countPerStage[supposedTargetStage] + 1
+                else
+                    backupGroup:SendRTBAndDespawn()
+                end
+            elseif backupGroup.state == Spearhead.internal.CapGroup.GroupState.RTBINTEN and backupGroup:GetTargetZone(self.activeStage) ~= backupGroup.assignedStageNumber then
+                backupGroup:SendRTB()
+            end
+        end
+
+        --Schedule or reassign primary units if applicable
+        for _, primaryGroup in pairs(self.PrimaryGroups) do
+            local supposedTargetStage = primaryGroup:GetTargetZone(self.activeStage)
+            if supposedTargetStage then
+                if requiredPerStage[supposedTargetStage] == nil then
+                    requiredPerStage[supposedTargetStage] = 0
+                end
+
+                if countPerStage[supposedTargetStage] == nil
+                 then
+                    countPerStage[supposedTargetStage] = 0
+                end
+
+                requiredPerStage[supposedTargetStage] =  requiredPerStage[supposedTargetStage] + 1
+
+                if primaryGroup.state == Spearhead.internal.CapGroup.GroupState.READYONRAMP then
+                    if countPerStage[supposedTargetStage] < requiredPerStage[supposedTargetStage] then
+                        primaryGroup:SendToStage(supposedTargetStage)
+                        countPerStage[supposedTargetStage] = countPerStage[supposedTargetStage] + 1
+                    end
+                elseif primaryGroup.state == Spearhead.internal.CapGroup.GroupState.INTRANSIT or primaryGroup.state == Spearhead.internal.CapGroup.GroupState.ONSTATION then
+                    if supposedTargetStage ~= primaryGroup.assignedStageNumber then
+                        if countPerStage[supposedTargetStage] < requiredPerStage[supposedTargetStage] then
+                            primaryGroup:SendToStage(supposedTargetStage)
+                        else
+                            countPerStage[supposedTargetStage] = countPerStage[supposedTargetStage] + 1
+                            primaryGroup:SendRTB()
+                        end
+                    end
+                    countPerStage[supposedTargetStage] = countPerStage[supposedTargetStage] + 1
+                elseif primaryGroup.state == Spearhead.internal.CapGroup.GroupState.RTBINTEN and primaryGroup:GetTargetZone(self.activeStage) ~= primaryGroup.assignedStageNumber then
+                    primaryGroup:SendRTB()
+                end
+            else
+                primaryGroup:SendRTBAndDespawn()
+            end
+        end
+
+        for _, backupGroup in pairs(self.BackupGroups) do
+            if backupGroup.state == Spearhead.internal.CapGroup.GroupState.READYONRAMP then
+                local supposedTargetStage = backupGroup:GetTargetZone(self.activeStage)
+                if supposedTargetStage then
+                    if countPerStage[supposedTargetStage] == nil then
+                        countPerStage[supposedTargetStage] = 0
+                    end
+    
+                    if countPerStage[supposedTargetStage] < requiredPerStage[supposedTargetStage] then
+                        backupGroup:SendToStage(supposedTargetStage)
+                        countPerStage[supposedTargetStage] = countPerStage[supposedTargetStage] + 1
+                    end
+                else
+                    backupGroup:SendRTBAndDespawn()
+                end
+            end
+        end
+    end
+
+    o.OnStageNumberChanged = function (self, number)
+        self.activeStage = number
+        self:SpawnIfApplicable()
+        timer.scheduleFunction(CheckReschedulingAsync, self, timer.getTime() + 5)
+    end
+
+    ---Check if any CAP is active when a certain stage is active
+    ---@param self table
+    ---@param stageNumber number
+    ---@return boolean
+    o.IsBaseActiveWhenStageIsActive = function (self, stageNumber)
+        for _, group in pairs(self.PrimaryGroups) do
+            local target = group:GetTargetZone(stageNumber)
+            if target ~= nil then
+                return true
+            end
+        end
+        return false
+    end
+
+    Spearhead.Events.AddStageNumberChangedListener(o)
+    return o
+end
+
+if not Spearhead.internal then Spearhead.internal = {} end
+Spearhead.internal.CapAirbase = CapBase
+end --CapAirbase.lua
+do --GlobalCapManager.lua
+local GlobalCapManager = {}
+do
+    local airbasesPerStage = {}
+    local allAirbasesByName = {}
+    local activeAirbasesPerActiveStage = {}
+    local unitsPerzonePerStage = {}
+
+    local initiated = false
+
+    function GlobalCapManager.start(database, capConfig, stageConfig)
+        if initiated == true then return end
+
+        local logger = Spearhead.LoggerTemplate:new("AirbaseManager", capConfig.logLevel)
+
+        local zones = database:getStagezoneNames()
+        if zones then
+            for key, stageName in pairs(zones) do
+                if airbasesPerStage[stageName] == nil then
+                    airbasesPerStage[stageName] = {}
+                end
+
+                local airbaseIds = database:getAirbaseIdsInStage(stageName)
+                if airbaseIds then
+                    for _, id in pairs(airbaseIds) do
+                        local airbaseName = Spearhead.DcsUtil.getAirbaseName(id)
+                        if airbaseName then
+                            local airbaseSpecificLogger = Spearhead.LoggerTemplate:new("CAP_" .. airbaseName, capConfig.logLevel)
+                            local airbase = Spearhead.internal.CapAirbase:new(id, database, airbaseSpecificLogger, capConfig, stageConfig)
+                            if airbase then
+                                table.insert(airbasesPerStage[stageName], airbase)
+                                allAirbasesByName[airbaseName] = airbase
+                            end
+                        end
+                    end
+                end
+            end
+        end
+
+        logger:info("Initiated " .. Spearhead.Util.tableLength(allAirbasesByName) .. " airbases for cap")
+        initiated = true
+
+        local InfoFunctions = {}
+
+        ---returns if there is CAP active 
+        ---@param zoneName any
+        ---@param activeZoneNumber number
+        ---@return boolean
+        InfoFunctions.IsCapActiveWhenZoneIsActive = function(zoneName, activeZoneNumber)
+            for _, airbase in pairs(airbasesPerStage[zoneName]) do
+                if airbase:IsBaseActiveWhenStageIsActive(activeZoneNumber) == true then
+                    return true
+                end
+            end
+            return false
+        end
+
+        Spearhead.capInfo = InfoFunctions
+    end
+end
+
+if not Spearhead.internal then Spearhead.internal = {} end
+Spearhead.internal.GlobalCapManager = GlobalCapManager
+
+end --GlobalCapManager.lua
+do --CapGroup.lua
+
+
+local CapHelper = {}
+do
+    ---comment
+    ---@param groupName string
+    ---@return table?
+    CapHelper.ParseGroupName = function(groupName)
+        local split_string = Spearhead.Util.split_string(groupName, "_")
+        local partCount = Spearhead.Util.tableLength(split_string)
+        if partCount >= 3 then
+            local result = {}
+            result.zonesConfig = {}
+
+            -- CAP_[1-5]5|[6]6|[7]7_Sukhoi
+            -- CAP_[1-5,7]A|[6]7_Sukhoi
+
+            local configPart = split_string[2]
+            local first = configPart:sub(1, 1)
+            if first == "A" then
+                result.isBackup = false
+                configPart = string.sub(configPart, 2, #configPart)
+            elseif first == "B" then
+                configPart = string.sub(configPart, 2, #configPart)
+                result.isBackup = true
+            elseif first == "[" then
+                result.isBackup = false
+            else
+                table.insert(Spearhead.MissionEditingWarnings, "Could not parse the CAP config for group: " .. groupName)
+                return nil
+            end
+
+            local subsplit = Spearhead.Util.split_string(configPart, "|")
+            if subsplit then
+                for key, value in pairs(subsplit) do
+                    local keySplit = Spearhead.Util.split_string(value, "]")
+                    local targetZone = keySplit[2]
+                    local allActives = string.sub(keySplit[1], 2, #keySplit[1])
+                    local commaSeperated = Spearhead.Util.split_string(allActives, ",")
+                    for _, value in pairs(commaSeperated) do
+                        local dashSeperated = Spearhead.Util.split_string(value, "-")
+                        if Spearhead.Util.tableLength(dashSeperated) > 1 then
+                            local from = tonumber(dashSeperated[1])
+                            local till = tonumber(dashSeperated[2])
+
+                            for i = from, till do
+                                if targetZone == "A" then
+                                    result.zonesConfig[tostring(i)] = tostring(i)
+                                else
+                                    result.zonesConfig[tostring(i)] = tostring(targetZone)
+                                end
+                            end
+                        else
+                            if targetZone == "A" then
+                                result.zonesConfig[tostring(dashSeperated[1])] = tostring(dashSeperated[1])
+                            else
+                                result.zonesConfig[tostring(dashSeperated[1])] = tostring(targetZone)
+                            end
+                        end
+                    end
+                end
+            end
+            return result
+        else
+            table.insert(Spearhead.MissionEditingWarnings,
+                "CAP Group with name: " .. groupName .. "should have at least 3 parts, but has " .. partCount)
+            return nil
+        end
+    end
+end
+
+---comment
+---@param input table { groupName, task, logger }
+---@param time number
+---@return nil
+local function setTaskAsync(input, time)
+    local task = input.task
+    local groupName = input.groupName
+    local group = Group.getByName(groupName)
+
+    if task then
+        group:getController():setTask(task)
+        if input.logger ~= nil then
+            input.logger:debug("task set succesfully to group " .. groupName)
+        end
+    end
+    return nil
+end
+
+local CapGroup = {}
+
+CapGroup.GroupState = {
+    UNSPAWNED = 0,
+    READYONRAMP = 1,
+    INTRANSIT = 2,
+    ONSTATION = 3,
+    RTBINTEN = 4,
+    RTB = 5,
+    DEAD = 6,
+    REARMING = 7
+}
+
+local function SetReadyOnRampAsync(self, time)
+    self:SetState(CapGroup.GroupState.READYONRAMP)
+end
+
+---comment
+---@param groupName string
+---@param airbaseId number
+---@param logger table logger dependency injection
+---@param database table database  dependency injection
+---@param capConfig table config dependency injection
+---@return table? o
+function CapGroup:new(groupName, airbaseId, logger, database, capConfig)
+    local o = {}
+    setmetatable(o, { __index = self })
+
+    local RESPAWN_AFTER_TOUCHDOWN_SECONDS = 180
+
+    -- initials
+    o.groupName = groupName
+    o.airbaseId = airbaseId
+    o.logger = logger
+    o.database = database
+
+    local parsed = CapHelper.ParseGroupName(groupName)
+    if parsed == nil then return nil end
+    o.capZonesConfig = parsed.zonesConfig
+    o.isBackup = parsed.isBackup
+
+    --vars
+    o.assignedStageNumber = nil
+    
+    o.state = CapGroup.GroupState.UNSPAWNED
+    o.aliveUnits = {}
+    o.landedUnits = {}
+    o.unitCount = 0
+    o.onStationSince = 0
+    o.currentCapTaskingDuration = 0
+    o.markedForDespawn = false
+
+    --config
+    o.capConfig = {}
+
+    if not capConfig then capConfig = {} end
+    o.capConfig.maxDeviationRange = capConfig.maxDeviationRange
+    o.capConfig.minSpeed = (capConfig.minSpeed or 400) * 0.514444
+    o.capConfig.maxSpeed = (capConfig.maxSpeed or 500) * 0.514444
+    o.capConfig.minAlt = (capConfig.minAlt or 8000) * 0.3048
+    o.capConfig.maxAlt = (capConfig.maxAlt or 27000) * 0.3048
+    o.capConfig.minDurationOnStation = capConfig.minDurationOnStation or 600
+    o.capConfig.maxDurationOnstation = capConfig.maxDurationOnStation or 1800
+    o.capConfig.rearmDelay = capConfig.rearmDelay or 300
+
+    ---comment
+    ---@param self table
+    ---@param currentActive number
+    ---@return table
+    o.GetTargetZone = function (self, currentActive)
+        return self.capZonesConfig[tostring(currentActive)]
+    end
+
+    o.SetState = function(self, state)
+        self.state = state
+        self:PublishUnitUpdatedEvent()
+    end
+
+    o.StartRearm = function(self)
+        self:SpawnOnTheRamp()
+        self:SetState(CapGroup.GroupState.REARMING)
+        timer.scheduleFunction(SetReadyOnRampAsync, self, timer.getTime() + self.capConfig.rearmDelay - RESPAWN_AFTER_TOUCHDOWN_SECONDS)
+    end
+
+    o.SpawnOnTheRamp = function(self)
+        self.markedForDespawn = false
+        self.logger:debug("Spawning group " .. self.groupName)
+        self.aliveUnits = {}
+        self.landedUnits = {}
+        self.onStationSince = 0
+
+        local group = Spearhead.DcsUtil.SpawnGroupTemplate(self.groupName, nil, nil, true)
+        if group then
+            self.unitCount = group:getInitialSize()
+
+            if self.state == CapGroup.GroupState.UNSPAWNED then
+                self:SetState(CapGroup.GroupState.READYONRAMP)
+            end
+
+            for _, unit in pairs(group:getUnits()) do
+                local name = unit:getName()
+                self.aliveUnits[name] = true
+                self.landedUnits[name] = false
+            end
+        end
+    end
+
+    o.Despawn = function(self)
+        self.logger:debug("Despawning group " .. self.groupName)
+        Spearhead.DcsUtil.DestroyGroup(self.groupName)
+        self:SetState(CapGroup.GroupState.UNSPAWNED)
+    end
+
+    o.SendRTB = function(self)
+        local group = Group.getByName(self.groupName)
+        if group and group:isExist() then
+            local speed = math.random(self.capConfig.minSpeed, self.capConfig.maxSpeed)
+            local rtbTask, errormessage = Spearhead.RouteUtil.CreateRTBMission(self.groupName, self.airbaseId, speed)
+            if rtbTask then
+                timer.scheduleFunction(setTaskAsync, { task = rtbTask, groupName = self.groupName, logger = self.logger }, timer.getTime() + 3)
+            else
+                self.logger:error("No RTB task could be created for group: " .. self.groupName .. " due to " .. errormessage)
+                if self.markedForDespawn == true then
+                    self:Despawn()
+                end
+            end
+        end
+    end
+
+    o.SendRTBAndDespawn = function(self)
+        self.markedForDespawn = true
+        o.SendRTB(self)
+    end
+
+    ---Starts and send this group to perform CAP at a stage
+    ---@param self any
+    ---@param stageZoneNumber string
+    o.SendToStage = function(self, stageZoneNumber)
+        if self.state == CapGroup.GroupState.DEAD or self.state == CapGroup.GroupState.RTB then
+            return --Can't task a unit that's dead or RTB
+        end
+
+        self.assignedStageNumber = stageZoneNumber
+        local group = Group.getByName(self.groupName)
+        if group and group:isExist() then
+            self.logger:debug("Sending group out " .. self.groupName)
+            local controller = group:getController()
+            local capPoints = database:getCapRouteInZone(stageZoneNumber, self.airbaseId)
+
+            local altitude = math.random(self.capConfig.minAlt, self.capConfig.maxAlt)
+            local speed = math.random(self.capConfig.minSpeed, self.capConfig.maxSpeed)
+            local attackHelos = false
+            local deviationDistance = self.capConfig.maxDeviationRange
+            local capTask
+            if self.state == CapGroup.GroupState.ONRAMP or self.onStationSince == 0 then
+                controller:setCommand({
+                    id = 'Start',
+                    params = {}
+                })
+                local duration = math.random(self.capConfig.minDurationOnStation, self.capConfig
+                .maxDurationOnstation)
+                self.logger:debug("random schedule min: " ..
+                tostring(self.capConfig.minDurationOnStation or "nil") ..
+                " max: " .. tostring(self.capConfig.maxDurationOnstation or "nil") .. " actual " .. duration)
+                self.currentCapTaskingDuration = duration
+
+                
+                capTask = Spearhead.RouteUtil.createCapMission(self.groupName, self.airbaseId, capPoints.point1, capPoints.point2, altitude, speed, duration, attackHelos, deviationDistance)
+            else
+                local duration = self.currentCapTaskingDuration - (timer.getTime() - o.onStationSince)
+                capTask = Spearhead.RouteUtil.createCapMission(self.groupName, self.airbaseId, capPoints.point1, capPoints.point2, altitude, speed, duration, attackHelos, deviationDistance)
+            end
+
+            if capTask then
+                timer.scheduleFunction(setTaskAsync,
+                    { task = capTask, groupName = self.groupName, logger = self.logger }, timer.getTime() + 3)
+            end
+            self:SetState(CapGroup.GroupState.INTRANSIT)
+        end
+    end
+
+    ---Starts and send a unit to another airbase
+    ---@param self table
+    ---@param airdomeId any
+    o.SendToAirbase = function(self, airdomeId)
+        self.airbaseId = airdomeId
+        local speed = math.random(self.capConfig.minSpeed, self.capConfig.maxSpeed)
+        local rtbTask = Spearhead.RouteUtil.CreateRTBMission(self.groupName, airdomeId, speed)
+        local group = Group.getByName(self.groupName)
+        local controller = group:getController()
+        controller:setCommand({
+            id = 'Start',
+            params = {}
+        })
+        timer.scheduleFunction(setTaskAsync, { task = rtbTask, groupName = self.groupName, logger = self.logger },
+            timer.getTime() + 5)
+    end
+
+    o.OnGroupRTB = function(self, groupName)
+        if groupName == self.groupName then
+            self.logger:debug("Setting group " ..
+            groupName ..
+            " to state RTB after a total of " ..
+            timer.getTime() - self.onStationSince .. "s of the " .. self.currentCapTaskingDuration .. "s")
+            self:SetState(CapGroup.GroupState.RTB)
+        end
+    end
+
+    o.OnGroupRTBInTen = function(self, groupName)
+        if groupName == self.groupName then
+            self:SetState(CapGroup.GroupState.RTBINTEN)
+        end
+    end
+
+    o.OnGroupOnStation = function(self, groupName)
+        if groupName == self.groupName then
+            self.onStationSince = timer.getTime()
+            self.logger:debug("Setting group " .. groupName .. " to state Onstation")
+            self:SetState(CapGroup.GroupState.ONSTATION)
+        end
+    end
+
+    ---comment
+    ---@param self table
+    ---@param proActive boolean Will check all units in group for aliveness
+    o.UpdateState = function(self, proActive)
+        local landed = false
+        local landedCount = 0
+        for name, landedBool in pairs(self.landedUnits) do
+            if landedBool == true then
+                landedCount = landedCount + 1
+                landed = true
+            end
+        end
+
+        local deadCount = 0
+        for name, isAlive in pairs(self.aliveUnits) do
+            if isAlive == false then
+                deadCount = deadCount + 1
+            end
+        end
+
+        local function DelayedStartRearm(input, time)
+            local capGroup = input.self
+            capGroup:StartRearm()
+        end
+
+        if landedCount + deadCount == self.unitCount then
+            if landed then
+                if self.markedForDespawn == true then
+                    self:Despawn()
+                else
+                    timer.scheduleFunction(DelayedStartRearm, { self = self }, timer.getTime() + RESPAWN_AFTER_TOUCHDOWN_SECONDS)
+                end
+            else
+                if self.markedForDespawn == true then
+                    self:Despawn()
+                else
+                    local delay = self.capConfig.deathDelay - self.capConfig.rearmDelay + RESPAWN_AFTER_TOUCHDOWN_SECONDS
+                    timer.scheduleFunction(DelayedStartRearm, { self = self }, timer.getTime() + delay)
+                end
+            end
+        end
+    end
+
+    o.eventListeners = {}
+    ---comment
+    ---@param self table
+    ---@param listener table object with  function OnGroupStateUpdated(capGroupTable)
+    o.AddOnStateUpdatedListener = function(self, listener)
+        if type(listener) ~= "table" then
+            self.logger:error("Listener not of type table for AddOnStateUpdatedListener")
+            return
+        end
+
+        if listener.OnGroupStateUpdated == nil then
+            self.logger:error("Listener does not implement OnGroupStateUpdated")
+            return
+        end
+        table.insert(self.eventListeners, listener)
+    end
+
+    o.PublishUnitUpdatedEvent = function(self)
+        for _, callable in pairs(self.eventListeners) do
+            local _, error = pcall(function()
+                callable:OnGroupStateUpdated(self)
+            end)
+            if error then
+                self.logger:error(error)
+            end
+        end
+    end
+
+    o.OnUnitLanded = function(self, initiatorUnit, airbase)
+        if airbase then
+            local airdomeId = airbase:getID()
+            self.airbaseId = airdomeId
+        end
+        local name = initiatorUnit:getName()
+        self.logger:debug("Received unit land event for unit " .. name .. " of group " .. self.groupName)
+
+        self.landedUnits[name] = true
+        self:UpdateState(false)
+    end
+
+    o.OnUnitLost = function(self, initiatorUnit)
+        self.logger:debug("Received unit lost event for group " .. self.groupName)
+        if initiatorUnit then
+            self.aliveUnits[initiatorUnit:getName()] = false
+        end
+        self:UpdateState(false)
+    end
+
+    Spearhead.Events.addOnGroupRTBListener(o.groupName, o)
+    Spearhead.Events.addOnGroupRTBInTenListener(o.groupName, o)
+    Spearhead.Events.addOnGroupOnStationListener(o.groupName, o)
+    local units = Group.getByName(groupName):getUnits()
+    for key, unit in pairs(units) do
+        Spearhead.Events.addOnUnitLandEventListener(unit:getName(), o)
+        Spearhead.Events.addOnUnitLostEventListener(unit:getName(), o)
+    end
+    return o
+end
+
+if not Spearhead.internal then Spearhead.internal = {} end
+Spearhead.internal.CapGroup = CapGroup
+
+end --CapGroup.lua
 
 local dbLogger = Spearhead.LoggerTemplate:new("database", Spearhead.LoggerTemplate.LogLevelOptions.INFO)
 local databaseManager = Spearhead.DB:new(dbLogger)
