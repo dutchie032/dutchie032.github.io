@@ -119,11 +119,13 @@ customElements.define('markdown-style', MarkdownStyle);</script><markdown-style 
     <p>Creating cap routes is not needed per se, but with a multi-stage stage (we have 2 stages with <code>_1_</code>) it is recommended.<br>Similarly with huge stages.<br>If there is multiple zones is will "round-robin" over them.<br></p>
     <p>If no CAP route is present the unit will fly a route generated differently per zone:<br><code>quad zone</code> => race-track between the corner closest to the origin airbase to the center point of the zone<br><code>circle zone</code> => race-track between the closest point on circle to the origin airbase to the center<br></p>
     <p>If you want to create you own CAP Routes you can!<br>For this example I created 2 CAP routes inside of the 2 <code>_1_</code> stages.<br></p>
-    <p>As you can see below there's a nice quick you can exploit. As long as the <code>X</code> of the zone is inside of the the <code>CAPROUTE</code> will be used!</p>
+    <p>As you can see below there's a nice feature you can exploit. As long as the <code>X</code> of the zone is inside of the the <code>CAPROUTE</code> will be used for that stage!</p>
     <p>
       <img src="./img/cap_routes.png" alt="CAP Routes Image">
     </p>
-    <h2 id="setting-up-the-missions"><a class="anchor" aria-hidden="true" tabindex="-1" href="#setting-up-the-missions"><span class="octicon octicon-link"></span></a>Setting up the missions</h2>
+    <p>Now all you need to do is start the mission (single player works just fine) and see the AI fly around.<br>Tip: Speeding up the simulation speed to 10x or 15x can help you see how the AI will fly and how it will behave.<br></p>
+    <p>Well, nice, we're don setting up the initial CAP effort.<br>If you want to change values for the CAP routes please read about how to configure it here: <a href="./Reference.html#cap-config">Cap Config</a></p>
+    <h2 id="setting-up-the-missions"><a class="anchor" aria-hidden="true" tabindex="-1" href="#setting-up-the-missions"><span class="octicon octicon-link"></span></a>Setting up the Missions</h2>
   <style>markdown-style pre .copied {
   display: flex;
   position: absolute;
