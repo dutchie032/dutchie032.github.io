@@ -102,14 +102,31 @@ customElements.define('markdown-style', MarkdownStyle);</script><markdown-style 
     <p>This page will give you a detailed overview of all options, moving parts and logic that goes into Spearhead.<br>If you however want to go right to the Get Started guide click here: <a href="./GetStarted.html#completion">here</a><br>You can always come back later here.<br>The Get Started guide will not show all details and reasoning.<br></p>
     <h2 id="feature--todo-list"><a class="anchor" aria-hidden="true" tabindex="-1" href="#feature--todo-list"><span class="octicon octicon-link"></span></a>Feature / TODO list</h2>
     <ul class="contains-task-list">
-      <li class="task-list-item"><input type="checkbox" checked disabled> CAP Manager
+      <li class="task-list-item"><input type="checkbox" disabled> CAP Manager
         <ul class="contains-task-list">
           <li class="task-list-item"><input type="checkbox" checked disabled> RTB flow. Flying out before primary flies back.</li>
-          <li>[]</li>
+          <li class="task-list-item"><input type="checkbox" disabled> Out of Missile flow</li>
         </ul>
       </li>
-      <li class="task-list-item"><input type="checkbox" disabled> Stage</li>
+      <li class="task-list-item"><input type="checkbox" disabled> Stage
+        <ul class="contains-task-list">
+          <li class="task-list-item"><input type="checkbox" disabled> Pre Activate
+            <ul class="contains-task-list">
+              <li class="task-list-item"><input type="checkbox" checked disabled> All SAM Sites</li>
+              <li class="task-list-item"><input type="checkbox" checked disabled> All Red airbase units</li>
+              <li class="task-list-item"><input type="checkbox" disabled> OCA Missions</li>
+            </ul>
+          </li>
+          <li class="task-list-item"><input type="checkbox" disabled> Activate
+            <ul class="contains-task-list">
+              <li class="task-list-item"><input type="checkbox" disabled> Activate all DEAD sites. (No surprise pop ups)</li>
+              <li class="task-list-item"><input type="checkbox" disabled> Activate other random mission till 10 max</li>
+            </ul>
+          </li>
+        </ul>
+      </li>
       <li class="task-list-item"><input type="checkbox" disabled> Mission</li>
+      <li class="task-list-item"><input type="checkbox" disabled> Team creation</li>
       <li class="task-list-item"><input type="checkbox" disabled> Airbases</li>
       <li class="task-list-item"><input type="checkbox" disabled> Farps</li>
       <li class="task-list-item"><input type="checkbox" disabled> Carrier/Fleet routes</li>

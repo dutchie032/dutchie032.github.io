@@ -104,6 +104,9 @@ customElements.define('markdown-style', MarkdownStyle);</script><markdown-style 
     <p>
       <img src="./img/script_install.png" alt="Spearhead install">
     </p>
+    <blockquote>
+      <p>Spearhead does not require any dependencies (eg. MIST or MOOSE). Compatibility with other frameworks is not tested at this time, so cannot be guaranteed, but there should be no conflicts if they are not controlling the same units.</p>
+    </blockquote>
     <h2 id="stages"><a class="anchor" aria-hidden="true" tabindex="-1" href="#stages"><span class="octicon octicon-link"></span></a>Stages</h2>
     <p>So first of all think about the stages. Read the details about them here: <a href="./Reference.html#stage">Stages</a><br>These are logically ordered zones that will activate one by one based on the mission status in them.<br>There is a little more to it, but you'll find out.<br></p>
     <p>Stages need to be named according to the convention: <code>MISSIONSTAGE_&#x3C;OrderNumber>_&#x3C;FreeForm></code><br>The first stage will be called <code>MISSIONSTAGE_1</code> or <code>MISSIONSTAGE_1_EAST</code> for example.<br></p>
@@ -130,9 +133,54 @@ customElements.define('markdown-style', MarkdownStyle);</script><markdown-style 
     <p>Now all you need to do is start the mission (single player works just fine) and see the AI fly around.<br>Tip: Speeding up the simulation speed to 10x or 15x can help you see how the AI will fly and how it will behave.<br></p>
     <p>Well, nice, we're don setting up the initial CAP effort.<br>If you want to change values for the CAP routes please read about how to configure it here: <a href="./Reference.html#cap-config">Cap Config</a></p>
     <blockquote>
-      <p><strong><em>NOTE:</em></strong> Stages that have CAP units active on their airbases will have all Airbases and <code>SAM</code> missions activated. This is to give the possibility to protect the enemy CAP units</p>
+      <p><strong><em>NOTE:</em></strong> Stages that have CAP units active on their airbases will have all Airbase units and <code>SAM</code> missions activated. This is to give the possibility to protect the enemy CAP units</p>
     </blockquote>
     <h2 id="setting-up-the-missions"><a class="anchor" aria-hidden="true" tabindex="-1" href="#setting-up-the-missions"><span class="octicon octicon-link"></span></a>Setting up the Missions</h2>
+    <p>Now the part where you as a mission maker can really get into the nitty gritty.<br>Missions are managed and monitored by Spearhead.<br>Statics, groups and single units all alike.<br></p>
+    <blockquote>
+      <p><strong><em>NOTE:</em></strong> While static are the same as groups in this context, they are not within DCS, please refrain from using static groups. A <code>static</code> in DCS has a 1:1 relation for group:unit</p>
+    </blockquote>
+    <p>For this example I'll set up two missions. The first one is <code>DEAD</code> mission and will consist of an SA-2 site with an additional "control center".</p>
+    <h4 id="mission-1-dead"><a class="anchor" aria-hidden="true" tabindex="-1" href="#mission-1-dead"><span class="octicon octicon-link"></span></a>Mission 1: DEAD</h4>
+    <p>As you can see on the left image the template of the SA-2 was placed. Then dragged around to only fce south.<br>An additional track radar and search radar was added and all launchers were surrounded by sandbags.<br>On top of this there was a sort of control center added with walls, vehicles and some tents.</p>
+    <p>On the right you can see the end result. Which is a very nice SA-2 site with static units spawned.<br></p>
+    <p>
+      <img src="./img/sa2_mission_editor.png" width="50%">
+      <img src="./img/sa2_result.png" width="50%"><br>
+    </p>
+    <p>Important to note. It's all inside the triggerzone <code>MISSION_DEAD_BYRON</code>. Which means it's a <code>MISSION</code> of type <code>DEAD</code> and with name <code>BYRON</code>.<br>At the start Spearhead will detect the triggerzone, take all units and despawn them and only spawn when needed for better performance.<br></p>
+    <p>The current list of mission types are:</p>
+    <pre><code class="code-highlight"><span class="code-line line-number" line="1">DEAD
+</span><span class="code-line line-number" line="2">BAI
+</span><span class="code-line line-number" line="3">STRIKE
+</span><span class="code-line line-number" line="4">
+</span><span class="code-line line-number" line="5">SAM -- Special type that will also activate on "pre-activated stages" 
+</span></code><div onclick="copied(this)" data-code="DEAD
+BAI
+STRIKE
+
+SAM -- Special type that will also activate on &#x22;pre-activated stages&#x22; 
+" class="copied"><svg class="octicon-copy" aria-hidden="true" viewBox="0 0 16 16" fill="currentColor" height="12" width="12"><path fill-rule="evenodd" d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z"></path><path fill-rule="evenodd" d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z"></path></svg><svg class="octicon-check" aria-hidden="true" viewBox="0 0 16 16" fill="currentColor" height="12" width="12"><path fill-rule="evenodd" d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"></path></svg></div></pre>
+    <p>Each type has some additional completion logic to it.<br><code>DEAD</code> and <code>SAM</code> missions will be marked complete when all air defences are destroyed. This includes Tracking Radars, Self tracking launchers and AAA guns if they are inside the zone.<br>If you want to add the Search radar or another random unit like the command tent to the target list you can add a <code>TGT_</code> prefix to the unit or group you want destroyed.<br>Please be aware that adding <code>TGT_</code> to a group will make the entire group a target and therefore each unit needs to be destroyed.<br></p>
+    <h4 id="mission-2-strike"><a class="anchor" aria-hidden="true" tabindex="-1" href="#mission-2-strike"><span class="octicon octicon-link"></span></a>Mission 2: STRIKE</h4>
+    <p>To show the power of <code>TGT_</code> targets I'll create a strike mission next.</p>
+    <p>A nice supply strike mission will do. Add a ship, some containers and some additional units.<br>Even some SHORADS to spice the whole thing up.<br>In the picture below all units that are selected and who show up as white (they are actually red) have the prefix <code>TGT_</code> in front of their name.<br></p>
+    <p>This will make it so the mission will be marked as complete when those units are destroyed. The rest of the units will exist until the entire stage is cleaned up.<br></p>
+    <p>
+      <img src="./img/strike_target.png"><br>
+    </p>
+    <h2 id="mission-briefings"><a class="anchor" aria-hidden="true" tabindex="-1" href="#mission-briefings"><span class="octicon octicon-link"></span></a>Mission Briefings</h2>
+    <p>So now we've created some missions we also want to add briefings to them. This is pretty easy with Spearhead.<br></p>
+    <p>To do so click on <code>draw</code> on the left hand pane in the mission editor. This opens up the drawing tools in the editor.<br>On the right click <code>TextBox</code> and click somewhere inside the zone to which you want to add the briefing.<br>Give the briefing a name (It's not used, but can be nice to use to reference the briefing later) and add the briefing.<br>The text box is quite small, but can have a lot of text. Easiest is to edit the text in an editor of choice and paste it into the box afterwards.<br></p>
+    <p>See the two images below. The left shows the <code>Text Box</code> drawing. The right shows the briefing as shown in the mission.</p>
+    <blockquote>
+      <p><strong><em>TIP:</em></strong> You can make both the <code>Color</code> and <code>Fill</code> have a <code>0</code> value for <code>a</code>. This will make the weird box be invisible. Make sure to add the name of the mission to the text box name to easily find it back.</p>
+    </blockquote>
+    <p>
+      <img src="./img/briefing_me.png" width="50%">
+      <img src="./img/briefing_mission.png" width="50%"><br>
+    </p>
+    <h2 id="airbase-and-miscelaneous-units"><a class="anchor" aria-hidden="true" tabindex="-1" href="#airbase-and-miscelaneous-units"><span class="octicon octicon-link"></span></a>Airbase and Miscelaneous units.</h2>
   <style>markdown-style pre .copied {
   display: flex;
   position: absolute;
