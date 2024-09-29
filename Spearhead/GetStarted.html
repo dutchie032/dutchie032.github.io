@@ -144,10 +144,14 @@ customElements.define('markdown-style', MarkdownStyle);</script><markdown-style 
     <h4 id="mission-1-dead"><a class="anchor" aria-hidden="true" tabindex="-1" href="#mission-1-dead"><span class="octicon octicon-link"></span></a>Mission 1: DEAD</h4>
     <p>As you can see on the left image the template of the SA-2 was placed. Then dragged around to only fce south.<br>An additional track radar and search radar was added and all launchers were surrounded by sandbags.<br>On top of this there was a sort of control center added with walls, vehicles and some tents.</p>
     <p>On the right you can see the end result. Which is a very nice SA-2 site with static units spawned.<br></p>
-    <p>
-      <img src="./img/sa2_mission_editor.png" width="50%">
-      <img src="./img/sa2_result.png" width="50%"><br>
-    </p>
+    <div style="display: flex">
+      <div style="flex: 50%">
+        <img src="./img/sa2_mission_editor.png">
+      </div>
+      <div style="flex: 50%">
+        <img src="./img/sa2_result.png">
+      </div>
+    </div>
     <p>Important to note. It's all inside the triggerzone <code>MISSION_DEAD_BYRON</code>. Which means it's a <code>MISSION</code> of type <code>DEAD</code> and with name <code>BYRON</code>.<br>At the start Spearhead will detect the triggerzone, take all units and despawn them and only spawn when needed for better performance.<br></p>
     <p>The current list of mission types are:</p>
     <pre><code class="code-highlight"><span class="code-line line-number" line="1">DEAD
@@ -176,10 +180,14 @@ SAM -- Special type that will also activate on &#x22;pre-activated stages&#x22;
     <blockquote>
       <p><strong><em>TIP:</em></strong> You can make both the <code>Color</code> and <code>Fill</code> have a <code>0</code> value for <code>a</code>. This will make the weird box be invisible. Make sure to add the name of the mission to the text box name to easily find it back.</p>
     </blockquote>
-    <p>
-      <img src="./img/briefing_me.png" width="50%">
-      <img src="./img/briefing_mission.png" width="50%"><br>
-    </p>
+    <div style="display: flex">
+      <div style="flex: 50%">
+        <img src="./img/briefing_me.png">
+      </div>
+      <div style="flex: 50%">
+        <img src="./img/briefing_mission.png">
+      </div>
+    </div>
     <h2 id="airbase-and-miscelaneous-units"><a class="anchor" aria-hidden="true" tabindex="-1" href="#airbase-and-miscelaneous-units"><span class="octicon octicon-link"></span></a>Airbase and Miscelaneous units.</h2>
   <style>markdown-style pre .copied {
   display: flex;
