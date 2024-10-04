@@ -1,5 +1,4 @@
 do --spearhead_base.lua
-
 --- DEFAULT Values
 if Spearhead == nil then Spearhead = {} end
 
@@ -83,6 +82,14 @@ do -- INIT UTIL
     ---@return boolean
     UTIL.startswith = function(str, findable)
         return str:find('^' .. findable) ~= nil
+    end
+
+    ---comment
+    ---@param str string
+    ---@param findable string
+    ---@return boolean
+    UTIL.strContains = function(str, findable)
+        return str:find(findable) ~= nil
     end
 
     ---comment
@@ -1257,13 +1264,85 @@ do --setup route util
             }
         }, ""
     end
+
+    ROUTE_UTIL.CreateCarrierRacetrack = function(pointA, pointB)
+        return {
+            id = "Mission",
+            params = {
+                airborne = false,
+                route = {
+                    points = {
+                        [1] =
+                        {
+                            ["alt"] = -0,
+                            ["type"] = "Turning Point",
+                            ["ETA"] = 0,
+                            ["alt_type"] = "BARO",
+                            ["formation_template"] = "",
+                            ["y"] = pointA.z,
+                            ["x"] = pointA.x,
+                            ["ETA_locked"] = false,
+                            ["speed"] = 13.88888,
+                            ["action"] = "Turning Point",
+                            ["task"] =
+                            {
+                                ["id"] = "ComboTask",
+                                ["params"] =
+                                {
+                                    ["tasks"] = {},
+                                }, -- end of ["params"]
+                            }, -- end of ["task"]
+                            ["speed_locked"] = true,
+                        },
+                        [2] =
+                        {
+                            ["alt"] = -0,
+                            ["type"] = "Turning Point",
+                            ["ETA"] = -0,
+                            ["alt_type"] = "BARO",
+                            ["formation_template"] = "",
+                            ["y"] = pointB.z,
+                            ["x"] = pointB.x,
+                            ["ETA_locked"] = false,
+                            ["speed"] = 13.88888,
+                            ["action"] = "Turning Point",
+                            ["task"] =
+                            {
+                                ["id"] = "ComboTask",
+                                ["params"] =
+                                {
+                                    ["tasks"] =
+                                    {
+                                        [1] =
+                                        {
+                                            ["enabled"] = true,
+                                            ["auto"] = false,
+                                            ["id"] = "GoToWaypoint",
+                                            ["number"] = 1,
+                                            ["params"] =
+                                            {
+                                                ["fromWaypointIndex"] = 2,
+                                                ["nWaypointIndx"] = 1,
+                                            },
+                                        },
+                                    },
+                                },
+                            },
+                            ["speed_locked"] = true,
+                        }
+                    }
+                }
+            }
+        }, ""
+    end
 end
 
 Spearhead.RouteUtil = ROUTE_UTIL
 
 local SpearheadEvents = {}
 do
-    local SpearheadLogger = Spearhead.LoggerTemplate:new("Spearhead Events", Spearhead.LoggerTemplate.LogLevelOptions.INFO)
+    local SpearheadLogger = Spearhead.LoggerTemplate:new("Spearhead Events",
+        Spearhead.LoggerTemplate.LogLevelOptions.INFO)
 
     do -- STAGE NUMBER CHANGED
         local OnStageNumberChangedListeners = {}
@@ -1456,9 +1535,8 @@ do
         end
     end
 
-    do --COMMANDS 
+    do     --COMMANDS
         do -- status updates
-
             local onStatusRequestReceivedListeners = {}
             ---comment
             ---@param listener table object with OnStatusRequestReceived(self, groupId)
@@ -1471,9 +1549,9 @@ do
                 table.insert(onStatusRequestReceivedListeners, listener)
             end
 
-            local triggerStatusRequestReceived = function (groupId)
+            local triggerStatusRequestReceived = function(groupId)
                 for _, callable in pairs(onStatusRequestReceivedListeners) do
-                    local succ, err = pcall(function ()
+                    local succ, err = pcall(function()
                         callable:OnStatusRequestReceived(groupId)
                     end)
                 end
@@ -1482,7 +1560,8 @@ do
             SpearheadEvents.AddCommandsToGroup = function(groupId)
                 local base = "MISSIONS"
                 if groupId then
-                    missionCommands.addCommandForGroup(groupId, "Stage Status", nil, triggerStatusRequestReceived, groupId)
+                    missionCommands.addCommandForGroup(groupId, "Stage Status", nil, triggerStatusRequestReceived,
+                        groupId)
                 end
             end
 
@@ -1490,7 +1569,7 @@ do
             local id = net.get_my_player_id()
             if id == 0 then
                 SpearheadLogger:info("Single Player detected")
-                 
+
                 local unit = world.getPlayer()
                 if unit then
                     local groupId = unit:getGroup():getID()
@@ -1498,19 +1577,20 @@ do
 
                     --DEBUG COMMANDS
                     do
-                        local activateStage = function (number)
+                        local activateStage = function(number)
                             SpearheadEvents.PublishStageNumberChanged(number)
                         end
 
-                        missionCommands.addSubMenuForGroup(groupId , "debug" , nil)
-                        missionCommands.addSubMenuForGroup(groupId , "Set Stage" , {"debug"})
+                        missionCommands.addSubMenuForGroup(groupId, "debug", nil)
+                        missionCommands.addSubMenuForGroup(groupId, "Set Stage", { "debug" })
 
                         for i = 0, 9 do
                             local menuName = tostring(i) .. ".."
-                            missionCommands.addSubMenuForGroup(groupId , menuName, {"debug", "Set Stage"})
+                            missionCommands.addSubMenuForGroup(groupId, menuName, { "debug", "Set Stage" })
                             for ii = 0, 9 do
-                                local number  = tonumber(tostring(i) .. tostring(ii))
-                                missionCommands.addCommandForGroup(groupId, "Stage " .. tostring(number), { "debug", "Set Stage", menuName }, activateStage, number)
+                                local number = tonumber(tostring(i) .. tostring(ii))
+                                missionCommands.addCommandForGroup(groupId, "Stage " .. tostring(number),
+                                { "debug", "Set Stage", menuName }, activateStage, number)
                             end
                         end
                     end
@@ -1654,6 +1734,7 @@ do -- DB
             o.tables.random_mission_zones = {}
             o.tables.farp_zones = {}
             o.tables.cap_route_zones = {}
+            o.tables.carrier_route_zones = {}
 
             o.tables.stage_zonesByNumer = {}
             o.tables.stage_numberPerzone = {}
@@ -1691,6 +1772,10 @@ do -- DB
 
                         if string.lower(split_string[1]) == "caproute" then
                             table.insert(o.tables.cap_route_zones, zone_name)
+                        end
+
+                        if string.lower(split_string[1]) == "carrierroute" then
+                            table.insert(o.tables.carrier_route_zones, zone_name)
                         end
                     end
                 end
@@ -1807,7 +1892,8 @@ do -- DB
                     end
                 end
             end
-
+        
+           
 
             o.tables.farpZonesPerStage = {}
             for _, farpZoneName in pairs(o.tables.farp_zones) do
@@ -2063,6 +2149,7 @@ do -- DB
                     end
                 end
             end
+
             o.Logger:debug(o.tables.capRoutesPerStageNumber)
             
             o.tables.missionCodes = {}
@@ -2141,6 +2228,10 @@ do -- DB
         ---@return table result a  list of stage zone names
         o.getStagezoneNames = function (self)
             return self.tables.stage_zones
+        end
+
+        o.getCarrierRouteZones = function (self)
+            return self.tables.carrier_route_zones
         end
 
         o.getMissionsForStage = function (self, stagename)
@@ -3087,6 +3178,164 @@ if not Spearhead.internal then Spearhead.internal = {} end
 Spearhead.internal.GlobalStageManager = GlobalStageManager
 
 end --GlobalStageManager.lua
+do --FleetGroup.lua
+local FleetGroup = {}
+
+function FleetGroup:new(fleetGroupName, database, logger)
+    local o = {}
+
+    setmetatable(o, { __index = self })
+
+    o.fleetGroupName = fleetGroupName
+    o.logger = logger
+
+    local split_name = Spearhead.Util.split_string(fleetGroupName, "_")
+    if Spearhead.Util.tableLength(split_name) < 2 then
+        Spearhead.AddMissionEditorWarning("CARRIERGROUP should have at least 2 parts. CARRIERGROUP_<fleetname>")
+        return nil
+    end
+    o.fleetNameIdentifier = split_name[2]
+
+    o.targetZonePerStage = {}
+    o.currentTargetZone = nil
+    o.pointsPerZone = {}
+
+    do --INIT
+        local carrierRouteZones = database:getCarrierRouteZones()
+        for _, zoneName in pairs(carrierRouteZones) do
+            if Spearhead.Util.strContains(string.lower(zoneName), "_".. string.lower(o.fleetNameIdentifier) .. "_" ) == true then
+                local zone = Spearhead.DcsUtil.getZoneByName(zoneName)
+                if zone and zone.zone_type == Spearhead.DcsUtil.ZoneType.Polygon then
+                    local split_string = Spearhead.Util.split_string(zoneName, "_")
+                    if Spearhead.Util.tableLength(split_string) < 3 then
+                        Spearhead.AddMissionEditorWarning(
+                            "CARRIERROUTE should at least have 3 parts. Check the documentation for: " .. zoneName)
+                    else
+                        local function GetTwoFurthestPoints(zone)
+                            local function getDist(a, b)
+                                return math.sqrt((b.x - a.x) ^ 2 + (b.z - a.z) ^ 2)
+                            end
+
+                            local biggest = nil
+                            local biggestA = nil
+                            local biggestB = nil
+
+                            for i = 1, 3 do
+                                for ii = i + 1, 4 do
+                                    local a = zone.verts[i]
+                                    local b = zone.verts[ii]
+                                    local dist = getDist(a, b)
+
+                                    if biggest == nil or dist > biggest then
+                                        biggestA = a
+                                        biggestB = b
+                                        biggest = dist
+                                    end
+                                end
+                            end
+                            return { x = biggestA.x, z = biggestA.z }, { x = biggestB.x, z = biggestB.z }
+                        end
+
+                        local function getMinMaxStage(namePart)
+                            if namePart == nil then
+                                return nil, nil
+                            end
+
+                            if Spearhead.Util.startswith(namePart, "%[") == true then
+                                namePart = Spearhead.Util.split_string(namePart, "[")[1]
+                            end
+
+                            if Spearhead.Util.strContains(namePart, "%]") == true then
+                                namePart = Spearhead.Util.split_string(namePart, "]")[1]
+                            end
+
+                            local split_numbers = Spearhead.Util.split_string(namePart, "-")
+                            if Spearhead.Util.tableLength(split_numbers) < 2  then
+                                Spearhead.AddMissionEditorWarning("CARRIERROUTE zone stage numbers not in the format _[<number>-<number>]: " .. zoneName)
+                                return nil, nil
+                            end
+
+                            local first = tonumber(split_numbers[1])
+                            local second = tonumber(split_numbers[2])
+
+                            if first == nil or second == nil  then
+                                Spearhead.AddMissionEditorWarning("CARRIERROUTE zone stage numbers not in the format _[<number>-<number>]: " .. zoneName)
+                                return nil, nil
+                            end
+                            return first, second
+                        end
+
+                        local pointA, pointB = GetTwoFurthestPoints(zone)
+                        local first, second = getMinMaxStage(split_string[3])
+                        if first ~= nil and second ~= nil then
+                            for i = first, second do
+                                o.targetZonePerStage[tostring(i)] = zoneName
+                            end
+                            o.pointsPerZone[zoneName] = { pointA = pointA, pointB = pointB }
+                        else
+                            Spearhead.AddMissionEditorWarning("CARRIERROUTE zone stage numbers not in the format _[<number>-<number>]: " .. zoneName)
+                        end
+                    end
+                else
+                    Spearhead.AddMissionEditorWarning("CARRIERROUTE cannot be a cilinder: " .. zoneName)
+                end
+            end
+        end
+    end
+
+    local SetTaskAsync = function(input, time)
+        local targetZone = input.targetZone
+        local task = input.task
+        local groupName = input.groupName
+        local logger = input.logger
+
+        local group = Group.getByName(groupName)
+        if group then
+            logger:info("Sending " .. fleetGroupName .. " to " .. targetZone)
+            group:getController():setTask(task)
+        end
+    end
+
+    o.OnStageNumberChanged = function(self, number)
+        local targetZone = self.targetZonePerStage[tostring(number)]
+        if targetZone and targetZone ~= self.currentTargetZone then
+            local points = self.pointsPerZone[targetZone]
+            local task  = Spearhead.RouteUtil.CreateCarrierRacetrack(points.pointA, points.pointB)
+            timer.scheduleFunction(SetTaskAsync, { task = task, targetZone = targetZone,  groupName = self.fleetGroupName, logger = self.logger }, timer.getTime() + 5)
+        end
+    end
+
+    Spearhead.Events.AddStageNumberChangedListener(o)
+    return o
+end
+
+if not Spearhead.internal then Spearhead.internal = {} end
+Spearhead.internal.FleetGroup = FleetGroup
+
+end --FleetGroup.lua
+do --GlobalFleetManager.lua
+
+
+local GlobalFleetManager = {}
+
+local fleetGroups = {}
+
+GlobalFleetManager.start = function(database)
+
+    local logger = Spearhead.LoggerTemplate:new("CARRIERFLEET", Spearhead.LoggerTemplate.LogLevelOptions.DEBUG)
+
+    local all_groups = Spearhead.DcsUtil.getAllGroupNames()
+    for _, groupName in pairs(all_groups) do
+        if Spearhead.Util.startswith(string.lower(groupName), "carriergroup" ) == true then
+            logger:info("Registering " .. groupName .. " as a managed fleet")
+            local carrierGroup = Spearhead.internal.FleetGroup:new(groupName, database, logger)
+            table.insert(fleetGroups, carrierGroup)
+        end
+    end
+end
+
+Spearhead.internal.GlobalFleetManager = GlobalFleetManager
+end --GlobalFleetManager.lua
 do --CapAirbase.lua
 
 local CapBase = {}
@@ -3793,7 +4042,7 @@ local stageConfig = {
 
 Spearhead.internal.GlobalCapManager.start(databaseManager, capConfig, stageConfig)
 Spearhead.internal.GlobalStageManager.start(databaseManager, stageConfig)
-
+Spearhead.internal.GlobalFleetManager.start(databaseManager)
 
 Spearhead.Events.PublishStageNumberChanged(1)
 

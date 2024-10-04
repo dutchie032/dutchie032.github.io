@@ -197,6 +197,11 @@ SAM -- Special type that will also activate on &#x22;pre-activated stages&#x22;
     <p>All units in a <code>Stage</code> zone that are not in an <code>Airbase</code> will be registered as miscelaneous units.<br>These will be activated the moment a stage gets "Active". (Not pre-activated)<br>It can be friendly forces driving around. A FARP with surrounding units and tents.</p>
     <h2 id="airbases-farps-and-carriers"><a class="anchor" aria-hidden="true" tabindex="-1" href="#airbases-farps-and-carriers"><span class="octicon octicon-link"></span></a>Airbases, Farps and Carriers</h2>
     <p>On top of units and missions, airbases, farps and carriers are big parts of a mission.</p>
+    <h3 id="carriers"><a class="anchor" aria-hidden="true" tabindex="-1" href="#carriers"><span class="octicon octicon-link"></span></a>Carriers</h3>
+    <p>Aircraft carriers and fleets are very nice, but what use have they if they won't move along with the front line?<br>For a carrier fleet to be managed it needs to abide to the name <code>CARRIERGROUP_&#x3C;name>_&#x3C;freeform></code><br>For example, we have a single carrier here with the groupname: <code>CARRIERGROUP_ALPHA_fleet</code><br>To let the framework know where you want the carrier to be at which stages of the mission you can create <code>CARRIERROUTE_&#x3C;name>_[&#x3C;number>-&#x3C;number>]_&#x3C;freeform></code> zones.<br>In the image below we have 2 zones. <code>CARRIERROUTE_ALPHA_[1-2]_ROUTE</code> and <code>CARRIERROUTE_ALPHA_[3-4]_ROUTE</code>.<br>This tells the framework where carriergroup <code>ALPHA</code> should go so you can have multiple smaller subfleets.<br></p>
+    <p>
+      <img src="img/carrierroutes.png" alt="carrierroutes">
+    </p>
   <style>markdown-style pre .copied {
   display: flex;
   position: absolute;
