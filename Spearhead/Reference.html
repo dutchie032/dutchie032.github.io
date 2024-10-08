@@ -100,15 +100,21 @@ customElements.define('markdown-style', MarkdownStyle);</script><markdown-style 
     </p>
     <h2 id="get-started"><a class="anchor" aria-hidden="true" tabindex="-1" href="#get-started"><span class="octicon octicon-link"></span></a>Get Started</h2>
     <p>This page will give you a detailed overview of all options, moving parts and logic that goes into Spearhead.<br>If you however want to go right to the Get Started guide click here: <a href="./GetStarted.html#completion">here</a><br>You can always come back later here.<br>The Get Started guide will not show all details and reasoning.<br></p>
+    <h2 id="release-notes"><a class="anchor" aria-hidden="true" tabindex="-1" href="#release-notes"><span class="octicon octicon-link"></span></a>Release Notes</h2>
+    <details>
+      <summary>01-10-2024 Initial Version</summary>The initial version with basic functionality
+    </details>
     <h2 id="feature--todo-list"><a class="anchor" aria-hidden="true" tabindex="-1" href="#feature--todo-list"><span class="octicon octicon-link"></span></a>Feature / TODO list</h2>
     <ul class="contains-task-list">
-      <li class="task-list-item"><input type="checkbox" disabled> CAP Manager
+      <li class="task-list-item">
+        <p><input type="checkbox" disabled> CAP Manager</p>
         <ul class="contains-task-list">
           <li class="task-list-item"><input type="checkbox" checked disabled> RTB flow. Flying out before primary flies back.</li>
           <li class="task-list-item"><input type="checkbox" disabled> Out of Missile flow</li>
         </ul>
       </li>
-      <li class="task-list-item"><input type="checkbox" disabled> Stage
+      <li class="task-list-item">
+        <p><input type="checkbox" disabled> Stage</p>
         <ul class="contains-task-list">
           <li class="task-list-item"><input type="checkbox" disabled> Pre Activate
             <ul class="contains-task-list">
@@ -123,18 +129,52 @@ customElements.define('markdown-style', MarkdownStyle);</script><markdown-style 
               <li class="task-list-item"><input type="checkbox" disabled> Activate other random mission till 10 max</li>
             </ul>
           </li>
+          <li class="task-list-item"><input type="checkbox" disabled> Completion Logic
+            <ul class="contains-task-list">
+              <li class="task-list-item"><input type="checkbox" disabled> ?? Custom Conditions ??</li>
+              <li class="task-list-item"><input type="checkbox" disabled> ?? Airbases as final mission ??</li>
+              <li class="task-list-item"><input type="checkbox" disabled> Required Mission types</li>
+            </ul>
+          </li>
         </ul>
       </li>
-      <li class="task-list-item"><input type="checkbox" disabled> Mission</li>
-      <li class="task-list-item"><input type="checkbox" disabled> Team creation</li>
-      <li class="task-list-item"><input type="checkbox" disabled> Airbases</li>
-      <li class="task-list-item"><input type="checkbox" disabled> Farps</li>
-      <li class="task-list-item"><input type="checkbox" disabled> Carrier/Fleet routes
+      <li class="task-list-item">
+        <p><input type="checkbox" disabled> Missions</p>
+        <ul class="contains-task-list">
+          <li class="task-list-item"><input type="checkbox" checked disabled> BAI</li>
+          <li class="task-list-item"><input type="checkbox" checked disabled> DEAD</li>
+          <li class="task-list-item"><input type="checkbox" checked disabled> STRIKE</li>
+          <li class="task-list-item"><input type="checkbox" disabled> INTERCEPT</li>
+          <li class="task-list-item"><input type="checkbox" disabled> LOGISTIC</li>
+          <li class="task-list-item"><input type="checkbox" disabled> EXTRACTION | MEDEVAC</li>
+          <li class="task-list-item"><input type="checkbox" disabled> More?</li>
+        </ul>
+      </li>
+      <li class="task-list-item">
+        <p><input type="checkbox" disabled> Warehouses</p>
+        <ul class="contains-task-list">
+          <li class="task-list-item"><input type="checkbox" disabled> Logistics [OPTIONAL]</li>
+          <li>[ ]</li>
+        </ul>
+      </li>
+      <li class="task-list-item">
+        <p><input type="checkbox" disabled> Team creation</p>
+      </li>
+      <li class="task-list-item">
+        <p><input type="checkbox" disabled> Airbases</p>
+      </li>
+      <li class="task-list-item">
+        <p><input type="checkbox" disabled> Farps</p>
+      </li>
+      <li class="task-list-item">
+        <p><input type="checkbox" disabled> Carrier/Fleet routes</p>
         <ul class="contains-task-list">
           <li class="task-list-item"><input type="checkbox" disabled> Fleet tracks</li>
         </ul>
       </li>
-      <li class="task-list-item"><input type="checkbox" disabled> Persistance</li>
+      <li class="task-list-item">
+        <p><input type="checkbox" disabled> Persistance</p>
+      </li>
     </ul>
     <h2 id="stage"><a class="anchor" aria-hidden="true" tabindex="-1" href="#stage"><span class="octicon octicon-link"></span></a>Stage</h2>
     <p>A stage is a logical part of a mission. It's isn't anything special per se, but everything revolves around stages in Spearhead.<br>Everything is tied to at a stage.<br></p>
