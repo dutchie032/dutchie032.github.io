@@ -1,5 +1,5 @@
 --[[
-        Spearhead Compile Time: 2024-10-11T22:30:27.805361
+        Spearhead Compile Time: 2024-10-11T22:31:43.136828
     ]]
 do --spearhead_base.lua
 --- DEFAULT Values
@@ -3893,7 +3893,7 @@ function CapBase:new(airbaseId, database, logger, capConfig, stageConfig)
             capGroup:AddOnStateUpdatedListener(o)
         end
     end
-    logger:info("" .. airbaseId .. "has a total of " .. Spearhead.Util.tableLength(o.groupsByName) .. "cap flights registered")
+    logger:info("Airbase with Id '" .. airbaseId .. "' has a total of " .. Spearhead.Util.tableLength(o.groupsByName) .. "cap flights registered")
 
     o.SpawnIfApplicable = function(self)
         self.logger:debug("Check spawns for airbase " .. self.airbaseId )
