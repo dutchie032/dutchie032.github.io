@@ -1,5 +1,5 @@
--- [[
-        Spearhead Compile Time: 2024-10-11T18:52:08.534756
+--[[
+        Spearhead Compile Time: 2024-10-11T18:55:16.152809
     ]]
 do --spearhead_base.lua
 --- DEFAULT Values
