@@ -1,3 +1,6 @@
+-- [[
+        Spearhead Compile Time: 2024-10-11T18:52:08.534756
+    ]]
 do --spearhead_base.lua
 --- DEFAULT Values
 if Spearhead == nil then Spearhead = {} end
