@@ -1,5 +1,5 @@
 --[[
-        Spearhead Compile Time: 2024-10-11T18:55:16.152809
+        Spearhead Compile Time: 2024-10-11T22:30:27.805361
     ]]
 do --spearhead_base.lua
 --- DEFAULT Values
@@ -1958,7 +1958,7 @@ do -- DB
 
                     o.tables.capGroupsOnAirbase[baseId] = {}
                     local groups = Spearhead.DcsUtil.areGroupsInCustomZone(all_groups,
-                        { x = point.x, z = point.z, radius = 6600 })
+                        { x = point.x, z = point.z, radius = 2048 })
                     for _, groupName in pairs(groups) do
                         is_group_taken[groupName] = true
                         table.insert(o.tables.capGroupsOnAirbase[baseId], groupName)
@@ -2021,7 +2021,7 @@ do -- DB
                     if isAirbaseInZone[tostring(baseId) or "something" ] == true and airbase:getDesc().category == Airbase.Category.AIRDROME then
                         o.tables.redAirbaseGroupsPerAirbase[baseId] = {}
                         o.tables.blueAirbaseGroupsPerAirbase[baseId] = {}
-                        local groups = Spearhead.DcsUtil.areGroupsInCustomZone(all_groups, { x = point.x, z = point.z, radius = 6600 })
+                        local groups = Spearhead.DcsUtil.areGroupsInCustomZone(all_groups, { x = point.x, z = point.z, radius = 2048 })
                         for _, groupName in pairs(groups) do
 
                             if Spearhead.DcsUtil.IsGroupStatic(groupName) == true then
@@ -2529,7 +2529,7 @@ do --init STAGE DIRECTOR
         end
 
         o.ActivateMissionsIfApplicable = function (self)
-            local activeCount = 0 
+            local activeCount = 0
 
             local availableMissions = {}
             for _, mission in pairs(self.db.missionsByCode) do
@@ -2555,6 +2555,7 @@ do --init STAGE DIRECTOR
                         if mission then
                             mission:Activate()
                             self:AddCommmandsForMissionToAllPlayers(mission)
+                            activeCount = activeCount + 1;
                         end
                         availableMissionsCount = availableMissionsCount - 1
                     end
@@ -2622,25 +2623,6 @@ do --init STAGE DIRECTOR
 
             timer.scheduleFunction(ActivateBlueAsync, self, timer.getTime() + 3)
 
-            -- for key, farp in pairs(self.db.farps) do
-            --     if farp.helipadnames then
-            --         for _, helipadName in pairs(farp.helipadnames) do
-            --             local helipad = Airbase.getByName(helipadName)
-            --             if helipad then
-            --                 logger:debug("Enabling: '" .. helipad:getName() .. "'")
-            --                 helipad:setCoalition(2)
-            --             else
-            --                 logger:warn(helipadName .. " not found when spawning farps")
-            --             end
-            --         end
-            --     end
-
-            --     if farp.group_names then
-            --         for _, groupName in pairs(farp.group_names) do
-            --             Spearhead.DcsUtil.SpawnGroupTemplate(groupName)
-            --         end
-            --     end
-            -- end
         end
 
         o.OnStatusRequestReceived = function(self, groupId)
@@ -2766,12 +2748,30 @@ do --init STAGE DIRECTOR
         
         o.OnMissionComplete = function(self, mission)
             timer.scheduleFunction(removeMissionCommandsDelayed, { self = self, mission = mission}, timer.getTime() + 20)
-            timer.scheduleFunction(activateMissionsIfApplicableAsync, self, timer.getTime() + 10)
+
+            if(self:IsComplete()) then
+                
+            else
+                timer.scheduleFunction(activateMissionsIfApplicableAsync, self, timer.getTime() + 10)
+            end
         end
 
         for _, mission in pairs(o.db.missionsByCode) do
             mission:AddMissionCompleteListener(o)
         end
+
+        o.StageCompleteListeners = {}
+        ---comment
+        ---@param self table
+        ---@param StageCompleteListener table a Object with tage
+        o.AddStageCompleteListener = function(self, StageCompleteListener)
+
+            if type(StageCompleteListener) ~= "table" then
+                return
+            end
+            table.insert(self.MissionCompleteListeners, StageCompleteListener)
+        end
+        
 
         Spearhead.Events.AddOnStatusRequestReceivedListener(o)
         Spearhead.Events.AddStageNumberChangedListener(o)
@@ -3893,6 +3893,7 @@ function CapBase:new(airbaseId, database, logger, capConfig, stageConfig)
             capGroup:AddOnStateUpdatedListener(o)
         end
     end
+    logger:info("" .. airbaseId .. "has a total of " .. Spearhead.Util.tableLength(o.groupsByName) .. "cap flights registered")
 
     o.SpawnIfApplicable = function(self)
         self.logger:debug("Check spawns for airbase " .. self.airbaseId )
