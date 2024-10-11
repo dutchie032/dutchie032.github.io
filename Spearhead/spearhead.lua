@@ -882,13 +882,11 @@ do --setup route util
     ---@return table
     local function GetCAPTargetTypes(attackHelos)
         local targetTypes = {
-            [1] = "Fighters",
-            [2] = "Multirole fighters",
-            [3] = "Bombers",
+            [1] = "Planes",
         }
 
         if attackHelos then
-            targetTypes[4] = "Helicopters"
+            targetTypes[2] = "Helicopters"
         end
 
         return targetTypes
@@ -3430,7 +3428,7 @@ do
             elseif first == "[" then
                 result.isBackup = false
             else
-                table.insert(Spearhead.MissionEditingWarnings, "Could not parse the CAP config for group: " .. groupName)
+                Spearhead.AddMissionEditorWarning("Could not parse the CAP config for group: " .. groupName)
                 return nil
             end
 
@@ -3466,8 +3464,7 @@ do
             end
             return result
         else
-            table.insert(Spearhead.MissionEditingWarnings,
-                "CAP Group with name: " .. groupName .. "should have at least 3 parts, but has " .. partCount)
+            Spearhead.AddMissionEditorWarning("CAP Group with name: " .. groupName .. "should have at least 3 parts, but has " .. partCount)
             return nil
         end
     end
@@ -3843,16 +3840,16 @@ function CapBase:new(airbaseId, database, logger, capConfig, stageConfig)
 
     if capConfig == nil then
         capConfig = {}
-        table.insert(Spearhead.MissionEditingWarnings,"CapConfig is nil")
+        Spearhead.AddMissionEditorWarning("CapConfig is nil")
     else
-        if capConfig.minSpeed == nil then Spearhead.MissionEditingWarnings("CapConfig.minSpeed is nil") end
-        if capConfig.maxSpeed == nil then Spearhead.MissionEditingWarnings("CapConfig.maxSpeed is nil") end
-        if capConfig.minAlt == nil then Spearhead.MissionEditingWarnings("CapConfig.minAlt is nil") end
-        if capConfig.maxAlt == nil then Spearhead.MissionEditingWarnings("CapConfig.maxAlt is nil") end
-        if capConfig.minDurationOnStation == nil then Spearhead.MissionEditingWarnings("CapConfig.minDurationOnStation is nil") end
-        if capConfig.maxDurationOnStation == nil then Spearhead.MissionEditingWarnings("CapConfig.maxDurationOnStation is nil") end
-        if capConfig.rearmDelay == nil then Spearhead.MissionEditingWarnings("CapConfig.rearmDelay is nil") end
-        if capConfig.deathDelay == nil then Spearhead.MissionEditingWarnings("CapConfig.deathDelay is nil") end
+        if capConfig.minSpeed == nil then Spearhead.AddMissionEditorWarning("CapConfig.minSpeed is nil") end
+        if capConfig.maxSpeed == nil then Spearhead.AddMissionEditorWarning("CapConfig.maxSpeed is nil") end
+        if capConfig.minAlt == nil then Spearhead.AddMissionEditorWarning("CapConfig.minAlt is nil") end
+        if capConfig.maxAlt == nil then Spearhead.AddMissionEditorWarning("CapConfig.maxAlt is nil") end
+        if capConfig.minDurationOnStation == nil then Spearhead.AddMissionEditorWarning("CapConfig.minDurationOnStation is nil") end
+        if capConfig.maxDurationOnStation == nil then Spearhead.AddMissionEditorWarning("CapConfig.maxDurationOnStation is nil") end
+        if capConfig.rearmDelay == nil then Spearhead.AddMissionEditorWarning("CapConfig.rearmDelay is nil") end
+        if capConfig.deathDelay == nil then Spearhead.AddMissionEditorWarning("CapConfig.deathDelay is nil") end
     end
 
     o.activeCapStages = (stageConfig or {}).capActiveStages or 10
