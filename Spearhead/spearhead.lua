@@ -1,5 +1,5 @@
 --[[
-        Spearhead Compile Time: 2024-10-12T14:18:11.883650
+        Spearhead Compile Time: 2024-10-12T16:55:57.713808
     ]]
 do --spearhead_base.lua
 --- DEFAULT Values
@@ -4246,7 +4246,7 @@ local capConfig = Spearhead.internal.configuration.CapConfig:new();
 local stageConfig = Spearhead.internal.configuration.StageConfig:new();
 
 Spearhead.internal.GlobalCapManager.start(databaseManager, capConfig, stageConfig)
-Spearhead.internal.GlobalStageManager.start(databaseManager, stageConfig)
+Spearhead.internal.GlobalStageManager:NewAndStart(databaseManager, stageConfig)
 Spearhead.internal.GlobalFleetManager.start(databaseManager)
 
 local SetStageDelayed = function(number, time)
