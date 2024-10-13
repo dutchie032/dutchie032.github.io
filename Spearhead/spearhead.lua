@@ -1,5 +1,5 @@
 --[[
-        Spearhead Compile Time: 2024-10-12T17:14:12.439729
+        Spearhead Compile Time: 2024-10-13T00:03:43.336374
     ]]
 do --spearhead_base.lua
 --- DEFAULT Values
@@ -2578,7 +2578,7 @@ do --init STAGE DIRECTOR
         o.IsComplete = function(self)
             for i, mission in pairs(self.db.missions) do
                 local state = mission:GetState()
-                if state == Spearhead.Mission.MissionState.ACTIVE or state == Spearhead.Mission.MissionState.NEW then
+                if state == Spearhead.internal.Mission.MissionState.ACTIVE or state == Spearhead.internal.Mission.MissionState.NEW then
                     return false
                 end
             end
@@ -2665,11 +2665,13 @@ do --init STAGE DIRECTOR
 
             local availableMissions = {}
             for _, mission in pairs(self.db.missionsByCode) do
-                if mission.missionState == Spearhead.internal.Mission.MissionState.ACTIVE then
+                local state = mission:GetState()
+
+                if state == Spearhead.internal.Mission.MissionState.ACTIVE then
                     activeCount = activeCount + 1
                 end
 
-                if mission.missionState == Spearhead.internal.Mission.MissionState.NEW then
+                if state == Spearhead.internal.Mission.MissionState.NEW then
                     table.insert(availableMissions, mission)
                 end
             end
@@ -3068,6 +3070,10 @@ do -- INIT Mission Class
             return nil
         end
 
+        o.GetState = function(self)
+            return self.missionState
+        end
+
         o.OnUnitLost = function(self, object)
             --[[
                 OnUnit lost event
@@ -3094,7 +3100,7 @@ do -- INIT Mission Class
                     self.targetAliveStates[name][name] = false
                 end
             end
-            timer.scheduleFunction(CheckStateAsync, self, timer.getTime() + 3)
+            timer.scheduleFunction(CheckStateAsync, self, timer.getTime() + 1)
         end
 
         o.MissionCompleteListeners = {}
@@ -3163,6 +3169,9 @@ do -- INIT Mission Class
                 end
             else
                 local function CountAliveGroups()
+
+                    self.logger:debug(self.groupUnitAliveDict)
+
                     local aliveGroups = 0
 
                     for _, group in pairs(self.groupUnitAliveDict) do
@@ -3242,7 +3251,7 @@ do -- INIT Mission Class
             else
                 local dead = 0
                 local total = 0
-                for _, group in pairs(self.targetAliveStates) do
+                for _, group in pairs(self.groupUnitAliveDict) do
                     for _, isAlive in pairs(group) do
                         total = total + 1
                         if isAlive == false then
@@ -3273,6 +3282,7 @@ do -- INIT Mission Class
         local Init = function(self)
             for key, group_name in pairs(self.groupNames) do
 
+
                 self.groupUnitAliveDict[group_name] = {}
                 self.targetAliveStates[group_name] = {}
 
@@ -3281,6 +3291,7 @@ do -- INIT Mission Class
 
                     if Spearhead.Util.startswith(group_name, "TGT_") == true then
                         self.targetAliveStates[group_name][group_name] = true
+                        self.hasSpecificTargets = true
                     end
                 else
                     local group = Group.getByName(group_name)
@@ -3293,26 +3304,30 @@ do -- INIT Mission Class
                         self.groupNamesPerUnit[unitName] = group_name
 
                         Spearhead.Events.addOnUnitLostEventListener(unitName, self)
-                        self.groupUnitAliveDict[group_name][unitName] = true
+                        
 
                         if isGroupTarget == true or Spearhead.Util.startswith(unitName, "TGT_") == true then
                             self.targetAliveStates[group_name][unitName] = true
+                            self.hasSpecificTargets = true
                         end
 
-                        if self.missionType == MissionType.DEAD or self.missionType == MissionType.SAM then
+                        if self.missionType == MissionType.BAI then
+                            if Spearhead.DcsUtil.IsGroupStatic(group_name) ~= true then
+                                self.groupUnitAliveDict[group_name][unitName] = true
+                            end
+                        elseif self.missionType == MissionType.DEAD or self.missionType == MissionType.SAM then
                             local desc = unit:getDesc()
                             local attributes = desc.attributes
                             if attributes["SAM"] == true or attributes["SAM TR"] or attributes["AAA"] then
                                 self.targetAliveStates[group_name][unitName] = true
+                                self.hasSpecificTargets = true
                             end
+                        else
+                            self.groupUnitAliveDict[group_name][unitName] = true
                         end
                     end
                 end
                 Spearhead.DcsUtil.DestroyGroup(group_name)
-            end
-
-            if Spearhead.Util.tableLength(self.targetAliveStates) > 0 then
-                self.hasSpecificTargets = true
             end
         end
 
@@ -3408,7 +3423,7 @@ function StageConfig:new()
     local maxMissionsPerStage = SpearheadConfig.StageConfig.maxMissionStage
     o.getMaxMissionsPerStage = function(self) return maxMissionsPerStage end
 
-    o.logLevel  = Spearhead.LoggerTemplate.LogLevelOptions.INFO
+    o.logLevel  = Spearhead.LoggerTemplate.LogLevelOptions.DEBUG
     return o;
 end
 
