@@ -1,5 +1,5 @@
 --[[
-        Spearhead Compile Time: 2024-10-23T14:16:48.738040
+        Spearhead Compile Time: 2024-10-23T16:11:31.139951
     ]]
 do --spearhead_events.lua
 
@@ -2457,6 +2457,7 @@ GlobalFleetManager.start = function(database)
     end
 end
 
+if not Spearhead.internal then Spearhead.internal = {} end
 Spearhead.internal.GlobalFleetManager = GlobalFleetManager
 end --GlobalFleetManager.lua
 do --FleetGroup.lua
