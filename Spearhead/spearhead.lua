@@ -1,5 +1,5 @@
 --[[
-        Spearhead Compile Time: 2024-10-23T13:56:02.390205
+        Spearhead Compile Time: 2024-10-23T14:15:27.557793
     ]]
 do --spearhead_events.lua
 
@@ -2871,9 +2871,6 @@ do --init STAGE DIRECTOR
                 end
             end
 
-            if activeCount <= 0 and availableMissions <= 0 then
-                
-            end
         end
 
         ---Cleans up all missions
