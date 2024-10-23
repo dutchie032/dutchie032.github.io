@@ -1,6 +1,781 @@
 --[[
-        Spearhead Compile Time: 2024-10-13T00:03:43.336374
+        Spearhead Compile Time: 2024-10-23T11:33:44.992750
     ]]
+do --spearhead_events.lua
+
+local SpearheadEvents = {}
+do
+    local SpearheadLogger = Spearhead.LoggerTemplate:new("Spearhead Events",
+        Spearhead.LoggerTemplate.LogLevelOptions.INFO)
+
+    do -- STAGE NUMBER CHANGED
+        local OnStageNumberChangedListeners = {}
+        local OnStageNumberChangedHandlers = {}
+
+        ---Add a stage zone number changed listener
+        ---@param listener table object with function OnStageNumberChanged(self, number)
+        SpearheadEvents.AddStageNumberChangedListener = function(listener)
+            if type(listener) ~= "table" then
+                SpearheadLogger:warn("Event listener not of type table, did you mean to use handler?")
+                return
+            end
+            table.insert(OnStageNumberChangedListeners, listener)
+        end
+
+        ---Add a stage zone number changed listener
+        ---@param handler function function(number)
+        SpearheadEvents.AddStageNumberChangedHandler = function(handler)
+            if type(handler) ~= "function" then
+                SpearheadLogger:warn("Event handler not of type function, did you mean to use listener?")
+                return
+            end
+            table.insert(OnStageNumberChangedHandlers, handler)
+        end
+
+        ---@param newStageNumber number
+        SpearheadEvents.PublishStageNumberChanged = function(newStageNumber)
+            for _, callable in pairs(OnStageNumberChangedListeners) do
+                local succ, err = pcall(function()
+                    callable:OnStageNumberChanged(newStageNumber)
+                end)
+                if err then
+                    SpearheadLogger:error(err)
+                end
+            end
+
+            for _, callable in pairs(OnStageNumberChangedHandlers) do
+                local succ, err = pcall(callable, newStageNumber)
+                if err then
+                    SpearheadLogger:error(err)
+                end
+            end
+        end
+    end
+
+    local onLandEventListeners = {}
+    ---Add an event listener to a specific unit
+    ---@param unitName string to call when the unit lands
+    ---@param landListener table table with function OnUnitLanded(self, initiatorUnit, airbase)
+    SpearheadEvents.addOnUnitLandEventListener = function(unitName, landListener)
+        if type(landListener) ~= "table" then
+            SpearheadLogger:warn("Event handler not of type table/object")
+            return
+        end
+
+        SpearheadLogger:debug("Added Land event handler for unit: " .. unitName)
+
+        if onLandEventListeners[unitName] == nil then
+            onLandEventListeners[unitName] = {}
+        end
+        table.insert(onLandEventListeners[unitName], landListener)
+    end
+
+    local OnUnitLostListeners = {}
+    ---This listener gets fired for any event that can indicate a loss of a unit.
+    ---Such as: Eject, Crash, Dead, Unit_Lost,
+    ---@param unitName any
+    ---@param unitLostListener table Object with function: OnUnitLost(initiatorUnit)
+    SpearheadEvents.addOnUnitLostEventListener = function(unitName, unitLostListener)
+        if type(unitLostListener) ~= "table" then
+            SpearheadLogger:warn("Unit lost Event listener not of type table/object")
+            return
+        end
+
+        if OnUnitLostListeners[unitName] == nil then
+            OnUnitLostListeners[unitName] = {}
+        end
+
+        table.insert(OnUnitLostListeners[unitName], unitLostListener)
+    end
+
+    do -- ON RTB
+        local OnGroupRTBListeners = {}
+        ---Adds a function to the events listener that triggers when a group publishes themselves RTB.
+        ---This is only available when a ROUTE is created via the Spearhead.RouteUtil
+        ---@param groupName string the groupname to expect
+        ---@param handlingObject table object with OnGroupRTB(self, groupName)
+        SpearheadEvents.addOnGroupRTBListener = function(groupName, handlingObject)
+            if type(handlingObject) ~= "table" then
+                SpearheadLogger:warn("Event handler not of type table/object")
+                return
+            end
+
+            if OnGroupRTBListeners[groupName] == nil then
+                OnGroupRTBListeners[groupName] = {}
+            end
+
+            table.insert(OnGroupRTBListeners[groupName], handlingObject)
+        end
+
+        ---Publish the Group to RTB
+        ---@param groupName string
+        SpearheadEvents.PublishRTB = function(groupName)
+            SpearheadLogger:debug("Publishing RTB event for group " .. groupName)
+            if groupName ~= nil then
+                if OnGroupRTBListeners[groupName] then
+                    for _, callable in pairs(OnGroupRTBListeners[groupName]) do
+                        local succ, err = pcall(function()
+                            callable:OnGroupRTB(groupName)
+                        end)
+                        if err then
+                            SpearheadLogger:error(err)
+                        end
+                    end
+                end
+            end
+        end
+
+        local OnGroupRTBInTenListeners = {}
+        ---Adds a function to the events listener that triggers when a group publishes themselves RTB.
+        ---This is only available when a ROUTE is created via the Spearhead.RouteUtil
+        ---@param groupName string the groupname to expect
+        ---@param handlingObject table object with OnGroupRTBInTen(self, groupName)
+        SpearheadEvents.addOnGroupRTBInTenListener = function(groupName, handlingObject)
+            if type(handlingObject) ~= "table" then
+                SpearheadLogger:warn("Event handler not of type table/object")
+                return
+            end
+
+            if OnGroupRTBInTenListeners[groupName] == nil then
+                OnGroupRTBInTenListeners[groupName] = {}
+            end
+
+            table.insert(OnGroupRTBInTenListeners[groupName], handlingObject)
+        end
+
+        ---Publish the Group is RTB
+        ---@param groupName string
+        SpearheadEvents.PublishRTBInTen = function(groupName)
+            SpearheadLogger:debug("Publishing RTB in TEN event for group " .. groupName)
+            if groupName ~= nil then
+                if OnGroupRTBInTenListeners[groupName] then
+                    for _, callable in pairs(OnGroupRTBInTenListeners[groupName]) do
+                        local succ, err = pcall(function()
+                            callable:OnGroupRTBInTen(groupName)
+                        end)
+                        if err then
+                            SpearheadLogger:error(err)
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    do -- ON Station
+        local OnGroupOnStationListeners = {}
+        ---Adds a function to the events listener that triggers when a group publishes themselves RTB.
+        ---This is only available when a ROUTE is created via the Spearhead.RouteUtil
+        ---@param groupName string the groupname to expect
+        SpearheadEvents.addOnGroupOnStationListener = function(groupName, handlingObject)
+            if type(handlingObject) ~= "table" then
+                SpearheadLogger:warn("Event handler not of type table/object")
+                return
+            end
+
+            if OnGroupOnStationListeners[groupName] == nil then
+                OnGroupOnStationListeners[groupName] = {}
+            end
+
+            table.insert(OnGroupOnStationListeners[groupName], handlingObject)
+        end
+
+        ---Publish the Group to RTB
+        ---@param groupName string
+        SpearheadEvents.PublishOnStation = function(groupName)
+            SpearheadLogger:debug("Publishing onStation event for group " .. groupName)
+            if groupName ~= nil then
+                if OnGroupOnStationListeners[groupName] then
+                    for _, callable in pairs(OnGroupOnStationListeners[groupName]) do
+                        local succ, err = pcall(function()
+                            callable:OnGroupOnStation(groupName)
+                        end)
+                        if err then
+                            SpearheadLogger:error(err)
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    do     --COMMANDS
+        do -- status updates
+            local onStatusRequestReceivedListeners = {}
+            ---comment
+            ---@param listener table object with OnStatusRequestReceived(self, groupId)
+            SpearheadEvents.AddOnStatusRequestReceivedListener = function(listener)
+                if type(listener) ~= "table" then
+                    SpearheadLogger:warn("Unit lost Event listener not of type table/object")
+                    return
+                end
+
+                table.insert(onStatusRequestReceivedListeners, listener)
+            end
+
+            local triggerStatusRequestReceived = function(groupId)
+                for _, callable in pairs(onStatusRequestReceivedListeners) do
+                    local succ, err = pcall(function()
+                        callable:OnStatusRequestReceived(groupId)
+                    end)
+                end
+            end
+
+            SpearheadEvents.AddCommandsToGroup = function(groupId)
+                local base = "MISSIONS"
+                if groupId then
+                    missionCommands.addCommandForGroup(groupId, "Stage Status", nil, triggerStatusRequestReceived,
+                        groupId)
+                end
+            end
+
+        end
+    end
+
+    do -- PLAYER ENTER UNIT
+        local playerEnterUnitListeners = {}
+        ---comment
+        ---@param listener table object with OnPlayerEnterUnit(self, unit)
+        SpearheadEvents.AddOnPlayerEnterUnitListener = function(listener)
+            if type(listener) ~= "table" then
+                SpearheadLogger:warn("Unit lost Event listener not of type table/object")
+                return
+            end
+
+            table.insert(playerEnterUnitListeners, listener)
+        end
+
+        SpearheadEvents.TriggerPlayerEntersUnit = function(unit)
+            if unit ~= nil then
+                if playerEnterUnitListeners then
+                    for _, callable in pairs(playerEnterUnitListeners) do
+                        local succ, err = pcall(function()
+                            callable:OnPlayerEnterUnit(unit)
+                        end)
+                        if err then
+                            SpearheadLogger:error(err)
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    local e = {}
+    function e:onEvent(event)
+        if event.id == world.event.S_EVENT_LAND or event.id == world.event.S_EVENT_RUNWAY_TOUCH then
+            local unit = event.initiator
+            local airbase = event.place
+            if unit ~= nil then
+                local name = unit:getName()
+                if onLandEventListeners[name] then
+                    for _, callable in pairs(onLandEventListeners[name]) do
+                        local succ, err = pcall(function()
+                            callable:OnUnitLanded(unit, airbase)
+                        end)
+                        if err then
+                            SpearheadLogger:error(err)
+                        end
+                    end
+                end
+            end
+        end
+
+        if event.id == world.event.S_EVENT_DEAD or
+            event.id == world.event.S_EVENT_CRASH or
+            event.id == world.event.S_EVENT_EJECTION or
+            event.id == world.event.S_EVENT_UNIT_LOST then
+            local object = event.initiator
+            if object and object.getName and OnUnitLostListeners[object:getName()] then
+                for _, callable in pairs(OnUnitLostListeners[object:getName()]) do
+                    local succ, err = pcall(function()
+                        callable:OnUnitLost(object)
+                    end)
+
+                    if err then
+                        SpearheadLogger:error(err)
+                    end
+                end
+            end
+        end
+
+        if event.id == world.event.S_EVENT_PLAYER_ENTER_UNIT then
+            env.info("blaat player entering unit")
+            local groupId = event.initiator:getGroup():getID()
+            SpearheadEvents.AddCommandsToGroup(groupId)
+        end
+    end
+
+    world.addEventHandler(e)
+end
+
+if Spearhead == nil then Spearhead = {} end
+Spearhead.Events = SpearheadEvents
+end --spearhead_events.lua
+do --spearhead_routeutil.lua
+local ROUTE_UTIL = {}
+do --setup route util
+    ---comment
+    ---@param attackHelos boolean
+    ---@return table
+    local function GetCAPTargetTypes(attackHelos)
+        local targetTypes = {
+            [1] = "Planes",
+        }
+
+        if attackHelos then
+            targetTypes[2] = "Helicopters"
+        end
+
+        return targetTypes
+    end
+
+    ---comment
+    ---@param airdromeId number
+    ---@param basePoint table { x, z, y } (y == alt)
+    ---@param speed number the speed
+    ---@return table task
+    local RtbTask = function(airdromeId, basePoint, speed)
+        if basePoint == nil then
+            basePoint = Spearhead.Util.getAirbaseById(airdromeId):getPoint()
+        end
+
+        return {
+            alt = basePoint.y,
+            action = "Landing",
+            alt_type = "BARO",
+            speed = speed,
+            ETA = 0,
+            ETA_locked = false,
+            x = basePoint.x,
+            y = basePoint.z,
+            speed_locked = true,
+            formation_template = "",
+            airdromeId = airdromeId,
+            type = "Land",
+            task = {
+                id = "ComboTask",
+                params = {
+                    tasks = {}
+                }
+            }
+        }
+    end
+
+    ---comment
+    ---@param groupName string
+    ---@param position table { x, y}
+    ---@param altitude number
+    ---@param speed number
+    ---@param duration number
+    ---@param engageHelos boolean
+    ---@param pattern string ["Race-Track"|"Circle"]
+    ---@return table
+    local CapTask = function(groupName, position, altitude, speed, duration, engageHelos, deviationdistance, pattern)
+        local durationBefore10 = duration - 600
+        if durationBefore10 < 0 then durationBefore10 = 0 end
+        local durationAfter10 = 600
+        if duration < 600 then
+            durationAfter10 = duration
+        end
+
+        return {
+            alt = altitude,
+            action = "Turning Point",
+            alt_type = "BARO",
+            speed = speed,
+            ETA = 0,
+            ETA_locked = false,
+            x = position.x,
+            y = position.z,
+            speed_locked = true,
+            formation_template = "",
+            task = {
+                id = "ComboTask",
+                params = {
+                    tasks = {
+                        [1] = {
+                            number = 1,
+                            auto = false,
+                            id = "WrappedAction",
+                            enabled = "true",
+                            params = {
+                                action = {
+                                    id = "Script",
+                                    params = {
+                                        command = "pcall(Spearhead.Events.PublishOnStation, \"" .. groupName .. "\")"
+                                    }
+                                }
+                            }
+                        },
+                        [2] = {
+                            id = 'EngageTargets',
+                            params = {
+                                maxDist = deviationdistance,
+                                maxDistEnabled = deviationdistance >= 0, -- required to check maxDist
+                                targetTypes = GetCAPTargetTypes(engageHelos),
+                                priority = 0
+                            }
+                        },
+                        [3] = {
+                            number = 3,
+                            auto = false,
+                            id = "ControlledTask",
+                            enabled = true,
+                            params = {
+                                task = {
+                                    id = "Orbit",
+                                    params = {
+                                        altitude = altitude,
+                                        pattern = pattern,
+                                        speed = speed,
+                                    }
+                                },
+                                stopCondition = {
+                                    duration = durationBefore10,
+                                    condition = "return Spearhead.DcsUtil.IsBingoFuel(\"" .. groupName .. "\", 0.10)",
+                                }
+                            }
+                        },
+                        [4] = {
+                            number = 4,
+                            auto = false,
+                            id = "WrappedAction",
+                            enabled = "true",
+                            params = {
+                                action = {
+                                    id = "Script",
+                                    params = {
+                                        command = "pcall(Spearhead.Events.PublishRTBInTen, \"" .. groupName .. "\")"
+                                    }
+                                }
+                            }
+                        },
+                        [5] = {
+                            number = 5,
+                            auto = false,
+                            id = "ControlledTask",
+                            enabled = true,
+                            params = {
+                                task = {
+                                    id = "Orbit",
+                                    params = {
+                                        altitude = altitude,
+                                        pattern = pattern,
+                                        speed = speed,
+                                    }
+                                },
+                                stopCondition = {
+                                    duration = durationAfter10,
+                                    condition = "return Spearhead.DcsUtil.IsBingoFuel(\"" .. groupName .. "\")",
+                                }
+                            }
+                        },
+                        [6] = {
+                            number = 6,
+                            auto = false,
+                            id = "WrappedAction",
+                            enabled = "true",
+                            params = {
+                                action = {
+                                    id = "Script",
+                                    params = {
+                                        command = "pcall(Spearhead.Events.PublishRTB, \"" .. groupName .. "\")"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    end
+
+    ---comment
+    ---@param position table { x, y}
+    ---@param altitude number
+    ---@param speed number
+    ---@param childTasks table
+    ---@return table
+    local FlyToPointTask = function(position, altitude, speed, childTasks)
+        return {
+            alt = altitude,
+            action = "Turning Point",
+            alt_type = "BARO",
+            speed = speed,
+            ETA = 0,
+            ETA_locked = false,
+            x = position.x,
+            y = position.z,
+            speed_locked = true,
+            formation_template = "",
+            task = {
+                id = "ComboTask",
+                params = {
+                    tasks = childTasks or {}
+                }
+            }
+        }
+    end
+
+    ---comment
+    ---@param groupName string groupName you're creating this route for
+    ---@param airdromeId number airdromeId
+    ---@param capPoint table { x, z }
+    ---@param altitude number
+    ---@param speed number
+    ---@param durationOnStation number
+    ---@param attackHelos boolean
+    ---@param deviationDistance number
+    ---@return table route
+    ROUTE_UTIL.createCapMission = function(groupName, airdromeId, capPoint, racetrackSecondPoint, altitude, speed,
+                                           durationOnStation, attackHelos, deviationDistance)
+        local baseName = Spearhead.DcsUtil.getAirbaseName(airdromeId)
+        if baseName == nil then
+            return {}
+        end
+
+        durationOnStation = durationOnStation or 1800
+        altitude = altitude or 3000
+        speed = speed or 130
+        attackHelos = attackHelos or false
+        deviationDistance = deviationDistance or 32186
+
+        local base = Airbase.getByName(baseName)
+        if base == nil then
+            return {}
+        end
+
+        local additionalFlyOverTasks = {
+            {
+                enabled = true,
+                auto = false,
+                id = "WrappedAction",
+                number = 1,
+                params = {
+                    action = {
+                        id = "Option",
+                        params = {
+                            variantIndex = 2,
+                            name = AI.Option.Air.id.FORMATION,
+                            formationIndex = 2,
+                            value = 131074
+                        }
+                    }
+                }
+            }
+        }
+
+        local orbitType = "Circle"
+        if racetrackSecondPoint then orbitType = "Race-Track" end
+
+        local basePoint = base:getPoint()
+        local points = {}
+        if racetrackSecondPoint == nil then
+            points = {
+                [1] = FlyToPointTask(capPoint, altitude, speed, additionalFlyOverTasks),
+                [2] = CapTask(groupName, capPoint, altitude, speed, durationOnStation, attackHelos, deviationDistance,
+                    orbitType),
+                [3] = RtbTask(airdromeId, basePoint, speed)
+            }
+        else
+            points = {
+                [1] = FlyToPointTask(capPoint, altitude, speed, additionalFlyOverTasks),
+                [2] = CapTask(groupName, capPoint, altitude, speed, durationOnStation, attackHelos, deviationDistance,
+                    orbitType),
+                [3] = FlyToPointTask(racetrackSecondPoint, altitude, speed, {}),
+                [4] = RtbTask(airdromeId, basePoint, speed)
+            }
+        end
+
+        return {
+            id = 'Mission',
+            params = {
+                airborne = true,
+                route = {
+                    points = points
+                }
+            }
+        }
+    end
+
+    ---Creates an RTB task. The first point is to trigger the TDCS OnRTB Event, the second task will be the actual RTB point
+    ---If any of the values are not met it will return nil
+    ---@param groupName string
+    ---@param airdromeId number
+    ---@param speed number
+    ---@return table?, string ComboTask
+    ROUTE_UTIL.CreateRTBMission = function(groupName, airdromeId, speed)
+        --[[
+            TODO: Test the creation and pubishing of event and the timing of said event
+        ]] --
+
+        local base = Spearhead.DcsUtil.getAirbaseById(airdromeId)
+        if base == nil then
+            return nil, "No airbase found for ID " .. tostring(airdromeId)
+        end
+
+        local group = Group.getByName(groupName)
+        local pos;
+        local i = 1
+        local units = group:getUnits()
+        while pos == nil and i <= Spearhead.Util.tableLength(units) do
+            local unit = units[i]
+            if unit and unit:isExist() == true and unit:inAir() == true then
+                pos = unit:getPoint()
+            end
+            i = i + 1
+        end
+
+        speed = speed or 130
+        if pos == nil then
+            return nil, "Could not find any unit in the air to set the RTB task"
+        end
+
+        local additionalFlyOverTasks = {
+            {
+                enabled = true,
+                auto = false,
+                id = "WrappedAction",
+                number = 1,
+                params = {
+                    action = {
+                        id = "Option",
+                        params = {
+                            variantIndex = 2,
+                            name = AI.Option.Air.id.FORMATION,
+                            formationIndex = 2,
+                            value = 131074
+                        }
+                    }
+                }
+            }
+        }
+
+        return {
+            id = "Mission",
+            params = {
+                airborne = true, -- RTB mission generally are given to airborne units
+                route = {
+                    points = {
+
+                        [1] = {
+                            alt = pos.y,
+                            action = "Turning Point",
+                            alt_type = "BARO",
+                            speed = speed,
+                            ETA = 0,
+                            ETA_locked = false,
+                            x = pos.x,
+                            y = pos.z,
+                            speed_locked = true,
+                            formation_template = "",
+                            task = {
+                                id = "ComboTask",
+                                params = {
+                                    tasks = {
+                                        [1] = {
+                                            number = 1,
+                                            auto = false,
+                                            id = "WrappedAction",
+                                            enabled = "true",
+                                            params = {
+                                                action = {
+                                                    id = "Script",
+                                                    params = {
+                                                        command = "pcall(Spearhead.Events.PublishRTB, \"" ..
+                                                            groupName .. "\")"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        [2] = FlyToPointTask(base:getPoint(), 600, speed, additionalFlyOverTasks),
+                        [3] = RtbTask(airdromeId, base:getPoint(), speed)
+                    }
+                }
+            }
+        }, ""
+    end
+
+    ROUTE_UTIL.CreateCarrierRacetrack = function(pointA, pointB)
+        return {
+            id = "Mission",
+            params = {
+                airborne = false,
+                route = {
+                    points = {
+                        [1] =
+                        {
+                            ["alt"] = -0,
+                            ["type"] = "Turning Point",
+                            ["ETA"] = 0,
+                            ["alt_type"] = "BARO",
+                            ["formation_template"] = "",
+                            ["y"] = pointA.z,
+                            ["x"] = pointA.x,
+                            ["ETA_locked"] = false,
+                            ["speed"] = 13.88888,
+                            ["action"] = "Turning Point",
+                            ["task"] =
+                            {
+                                ["id"] = "ComboTask",
+                                ["params"] =
+                                {
+                                    ["tasks"] = {},
+                                }, -- end of ["params"]
+                            }, -- end of ["task"]
+                            ["speed_locked"] = true,
+                        },
+                        [2] =
+                        {
+                            ["alt"] = -0,
+                            ["type"] = "Turning Point",
+                            ["ETA"] = -0,
+                            ["alt_type"] = "BARO",
+                            ["formation_template"] = "",
+                            ["y"] = pointB.z,
+                            ["x"] = pointB.x,
+                            ["ETA_locked"] = false,
+                            ["speed"] = 13.88888,
+                            ["action"] = "Turning Point",
+                            ["task"] =
+                            {
+                                ["id"] = "ComboTask",
+                                ["params"] =
+                                {
+                                    ["tasks"] =
+                                    {
+                                        [1] =
+                                        {
+                                            ["enabled"] = true,
+                                            ["auto"] = false,
+                                            ["id"] = "GoToWaypoint",
+                                            ["number"] = 1,
+                                            ["params"] =
+                                            {
+                                                ["fromWaypointIndex"] = 2,
+                                                ["nWaypointIndx"] = 1,
+                                            },
+                                        },
+                                    },
+                                },
+                            },
+                            ["speed_locked"] = true,
+                        }
+                    }
+                }
+            }
+        }, ""
+    end
+end
+
+if Spearhead == nil then Spearhead = {} end
+Spearhead.RouteUtil = ROUTE_UTIL
+end --spearhead_routeutil.lua
 do --spearhead_base.lua
 --- DEFAULT Values
 if Spearhead == nil then Spearhead = {} end
@@ -1001,781 +1776,6 @@ Spearhead.LoadingDone = function()
 end
 
 end --spearhead_base.lua
-do --spearhead_events.lua
-
-local SpearheadEvents = {}
-do
-    local SpearheadLogger = Spearhead.LoggerTemplate:new("Spearhead Events",
-        Spearhead.LoggerTemplate.LogLevelOptions.INFO)
-
-    do -- STAGE NUMBER CHANGED
-        local OnStageNumberChangedListeners = {}
-        local OnStageNumberChangedHandlers = {}
-
-        ---Add a stage zone number changed listener
-        ---@param listener table object with function OnStageNumberChanged(self, number)
-        SpearheadEvents.AddStageNumberChangedListener = function(listener)
-            if type(listener) ~= "table" then
-                SpearheadLogger:warn("Event listener not of type table, did you mean to use handler?")
-                return
-            end
-            table.insert(OnStageNumberChangedListeners, listener)
-        end
-
-        ---Add a stage zone number changed listener
-        ---@param handler function function(number)
-        SpearheadEvents.AddStageNumberChangedHandler = function(handler)
-            if type(handler) ~= "function" then
-                SpearheadLogger:warn("Event handler not of type function, did you mean to use listener?")
-                return
-            end
-            table.insert(OnStageNumberChangedHandlers, handler)
-        end
-
-        ---@param newStageNumber number
-        SpearheadEvents.PublishStageNumberChanged = function(newStageNumber)
-            for _, callable in pairs(OnStageNumberChangedListeners) do
-                local succ, err = pcall(function()
-                    callable:OnStageNumberChanged(newStageNumber)
-                end)
-                if err then
-                    SpearheadLogger:error(err)
-                end
-            end
-
-            for _, callable in pairs(OnStageNumberChangedHandlers) do
-                local succ, err = pcall(callable, newStageNumber)
-                if err then
-                    SpearheadLogger:error(err)
-                end
-            end
-        end
-    end
-
-    local onLandEventListeners = {}
-    ---Add an event listener to a specific unit
-    ---@param unitName string to call when the unit lands
-    ---@param landListener table table with function OnUnitLanded(self, initiatorUnit, airbase)
-    SpearheadEvents.addOnUnitLandEventListener = function(unitName, landListener)
-        if type(landListener) ~= "table" then
-            SpearheadLogger:warn("Event handler not of type table/object")
-            return
-        end
-
-        SpearheadLogger:debug("Added Land event handler for unit: " .. unitName)
-
-        if onLandEventListeners[unitName] == nil then
-            onLandEventListeners[unitName] = {}
-        end
-        table.insert(onLandEventListeners[unitName], landListener)
-    end
-
-    local OnUnitLostListeners = {}
-    ---This listener gets fired for any event that can indicate a loss of a unit.
-    ---Such as: Eject, Crash, Dead, Unit_Lost,
-    ---@param unitName any
-    ---@param unitLostListener table Object with function: OnUnitLost(initiatorUnit)
-    SpearheadEvents.addOnUnitLostEventListener = function(unitName, unitLostListener)
-        if type(unitLostListener) ~= "table" then
-            SpearheadLogger:warn("Unit lost Event listener not of type table/object")
-            return
-        end
-
-        if OnUnitLostListeners[unitName] == nil then
-            OnUnitLostListeners[unitName] = {}
-        end
-
-        table.insert(OnUnitLostListeners[unitName], unitLostListener)
-    end
-
-    do -- ON RTB
-        local OnGroupRTBListeners = {}
-        ---Adds a function to the events listener that triggers when a group publishes themselves RTB.
-        ---This is only available when a ROUTE is created via the Spearhead.RouteUtil
-        ---@param groupName string the groupname to expect
-        ---@param handlingObject table object with OnGroupRTB(self, groupName)
-        SpearheadEvents.addOnGroupRTBListener = function(groupName, handlingObject)
-            if type(handlingObject) ~= "table" then
-                SpearheadLogger:warn("Event handler not of type table/object")
-                return
-            end
-
-            if OnGroupRTBListeners[groupName] == nil then
-                OnGroupRTBListeners[groupName] = {}
-            end
-
-            table.insert(OnGroupRTBListeners[groupName], handlingObject)
-        end
-
-        ---Publish the Group to RTB
-        ---@param groupName string
-        SpearheadEvents.PublishRTB = function(groupName)
-            SpearheadLogger:debug("Publishing RTB event for group " .. groupName)
-            if groupName ~= nil then
-                if OnGroupRTBListeners[groupName] then
-                    for _, callable in pairs(OnGroupRTBListeners[groupName]) do
-                        local succ, err = pcall(function()
-                            callable:OnGroupRTB(groupName)
-                        end)
-                        if err then
-                            SpearheadLogger:error(err)
-                        end
-                    end
-                end
-            end
-        end
-
-        local OnGroupRTBInTenListeners = {}
-        ---Adds a function to the events listener that triggers when a group publishes themselves RTB.
-        ---This is only available when a ROUTE is created via the Spearhead.RouteUtil
-        ---@param groupName string the groupname to expect
-        ---@param handlingObject table object with OnGroupRTBInTen(self, groupName)
-        SpearheadEvents.addOnGroupRTBInTenListener = function(groupName, handlingObject)
-            if type(handlingObject) ~= "table" then
-                SpearheadLogger:warn("Event handler not of type table/object")
-                return
-            end
-
-            if OnGroupRTBInTenListeners[groupName] == nil then
-                OnGroupRTBInTenListeners[groupName] = {}
-            end
-
-            table.insert(OnGroupRTBInTenListeners[groupName], handlingObject)
-        end
-
-        ---Publish the Group is RTB
-        ---@param groupName string
-        SpearheadEvents.PublishRTBInTen = function(groupName)
-            SpearheadLogger:debug("Publishing RTB in TEN event for group " .. groupName)
-            if groupName ~= nil then
-                if OnGroupRTBInTenListeners[groupName] then
-                    for _, callable in pairs(OnGroupRTBInTenListeners[groupName]) do
-                        local succ, err = pcall(function()
-                            callable:OnGroupRTBInTen(groupName)
-                        end)
-                        if err then
-                            SpearheadLogger:error(err)
-                        end
-                    end
-                end
-            end
-        end
-    end
-
-    do -- ON Station
-        local OnGroupOnStationListeners = {}
-        ---Adds a function to the events listener that triggers when a group publishes themselves RTB.
-        ---This is only available when a ROUTE is created via the Spearhead.RouteUtil
-        ---@param groupName string the groupname to expect
-        SpearheadEvents.addOnGroupOnStationListener = function(groupName, handlingObject)
-            if type(handlingObject) ~= "table" then
-                SpearheadLogger:warn("Event handler not of type table/object")
-                return
-            end
-
-            if OnGroupOnStationListeners[groupName] == nil then
-                OnGroupOnStationListeners[groupName] = {}
-            end
-
-            table.insert(OnGroupOnStationListeners[groupName], handlingObject)
-        end
-
-        ---Publish the Group to RTB
-        ---@param groupName string
-        SpearheadEvents.PublishOnStation = function(groupName)
-            SpearheadLogger:debug("Publishing onStation event for group " .. groupName)
-            if groupName ~= nil then
-                if OnGroupOnStationListeners[groupName] then
-                    for _, callable in pairs(OnGroupOnStationListeners[groupName]) do
-                        local succ, err = pcall(function()
-                            callable:OnGroupOnStation(groupName)
-                        end)
-                        if err then
-                            SpearheadLogger:error(err)
-                        end
-                    end
-                end
-            end
-        end
-    end
-
-    do     --COMMANDS
-        do -- status updates
-            local onStatusRequestReceivedListeners = {}
-            ---comment
-            ---@param listener table object with OnStatusRequestReceived(self, groupId)
-            SpearheadEvents.AddOnStatusRequestReceivedListener = function(listener)
-                if type(listener) ~= "table" then
-                    SpearheadLogger:warn("Unit lost Event listener not of type table/object")
-                    return
-                end
-
-                table.insert(onStatusRequestReceivedListeners, listener)
-            end
-
-            local triggerStatusRequestReceived = function(groupId)
-                for _, callable in pairs(onStatusRequestReceivedListeners) do
-                    local succ, err = pcall(function()
-                        callable:OnStatusRequestReceived(groupId)
-                    end)
-                end
-            end
-
-            SpearheadEvents.AddCommandsToGroup = function(groupId)
-                local base = "MISSIONS"
-                if groupId then
-                    missionCommands.addCommandForGroup(groupId, "Stage Status", nil, triggerStatusRequestReceived,
-                        groupId)
-                end
-            end
-
-        end
-    end
-
-    do -- PLAYER ENTER UNIT
-        local playerEnterUnitListeners = {}
-        ---comment
-        ---@param listener table object with OnPlayerEnterUnit(self, unit)
-        SpearheadEvents.AddOnPlayerEnterUnitListener = function(listener)
-            if type(listener) ~= "table" then
-                SpearheadLogger:warn("Unit lost Event listener not of type table/object")
-                return
-            end
-
-            table.insert(playerEnterUnitListeners, listener)
-        end
-
-        SpearheadEvents.TriggerPlayerEntersUnit = function(unit)
-            if unit ~= nil then
-                if playerEnterUnitListeners then
-                    for _, callable in pairs(playerEnterUnitListeners) do
-                        local succ, err = pcall(function()
-                            callable:OnPlayerEnterUnit(unit)
-                        end)
-                        if err then
-                            SpearheadLogger:error(err)
-                        end
-                    end
-                end
-            end
-        end
-    end
-
-    local e = {}
-    function e:onEvent(event)
-        if event.id == world.event.S_EVENT_LAND or event.id == world.event.S_EVENT_RUNWAY_TOUCH then
-            local unit = event.initiator
-            local airbase = event.place
-            if unit ~= nil then
-                local name = unit:getName()
-                if onLandEventListeners[name] then
-                    for _, callable in pairs(onLandEventListeners[name]) do
-                        local succ, err = pcall(function()
-                            callable:OnUnitLanded(unit, airbase)
-                        end)
-                        if err then
-                            SpearheadLogger:error(err)
-                        end
-                    end
-                end
-            end
-        end
-
-        if event.id == world.event.S_EVENT_DEAD or
-            event.id == world.event.S_EVENT_CRASH or
-            event.id == world.event.S_EVENT_EJECTION or
-            event.id == world.event.S_EVENT_UNIT_LOST then
-            local object = event.initiator
-            if object and object.getName and OnUnitLostListeners[object:getName()] then
-                for _, callable in pairs(OnUnitLostListeners[object:getName()]) do
-                    local succ, err = pcall(function()
-                        callable:OnUnitLost(object)
-                    end)
-
-                    if err then
-                        SpearheadLogger:error(err)
-                    end
-                end
-            end
-        end
-
-        if event.id == world.event.S_EVENT_PLAYER_ENTER_UNIT then
-            env.info("blaat player entering unit")
-            local groupId = event.initiator:getGroup():getID()
-            SpearheadEvents.AddCommandsToGroup(groupId)
-        end
-    end
-
-    world.addEventHandler(e)
-end
-
-if Spearhead == nil then Spearhead = {} end
-Spearhead.Events = SpearheadEvents
-end --spearhead_events.lua
-do --spearhead_routeutil.lua
-local ROUTE_UTIL = {}
-do --setup route util
-    ---comment
-    ---@param attackHelos boolean
-    ---@return table
-    local function GetCAPTargetTypes(attackHelos)
-        local targetTypes = {
-            [1] = "Planes",
-        }
-
-        if attackHelos then
-            targetTypes[2] = "Helicopters"
-        end
-
-        return targetTypes
-    end
-
-    ---comment
-    ---@param airdromeId number
-    ---@param basePoint table { x, z, y } (y == alt)
-    ---@param speed number the speed
-    ---@return table task
-    local RtbTask = function(airdromeId, basePoint, speed)
-        if basePoint == nil then
-            basePoint = Spearhead.Util.getAirbaseById(airdromeId):getPoint()
-        end
-
-        return {
-            alt = basePoint.y,
-            action = "Landing",
-            alt_type = "BARO",
-            speed = speed,
-            ETA = 0,
-            ETA_locked = false,
-            x = basePoint.x,
-            y = basePoint.z,
-            speed_locked = true,
-            formation_template = "",
-            airdromeId = airdromeId,
-            type = "Land",
-            task = {
-                id = "ComboTask",
-                params = {
-                    tasks = {}
-                }
-            }
-        }
-    end
-
-    ---comment
-    ---@param groupName string
-    ---@param position table { x, y}
-    ---@param altitude number
-    ---@param speed number
-    ---@param duration number
-    ---@param engageHelos boolean
-    ---@param pattern string ["Race-Track"|"Circle"]
-    ---@return table
-    local CapTask = function(groupName, position, altitude, speed, duration, engageHelos, deviationdistance, pattern)
-        local durationBefore10 = duration - 600
-        if durationBefore10 < 0 then durationBefore10 = 0 end
-        local durationAfter10 = 600
-        if duration < 600 then
-            durationAfter10 = duration
-        end
-
-        return {
-            alt = altitude,
-            action = "Turning Point",
-            alt_type = "BARO",
-            speed = speed,
-            ETA = 0,
-            ETA_locked = false,
-            x = position.x,
-            y = position.z,
-            speed_locked = true,
-            formation_template = "",
-            task = {
-                id = "ComboTask",
-                params = {
-                    tasks = {
-                        [1] = {
-                            number = 1,
-                            auto = false,
-                            id = "WrappedAction",
-                            enabled = "true",
-                            params = {
-                                action = {
-                                    id = "Script",
-                                    params = {
-                                        command = "pcall(Spearhead.Events.PublishOnStation, \"" .. groupName .. "\")"
-                                    }
-                                }
-                            }
-                        },
-                        [2] = {
-                            id = 'EngageTargets',
-                            params = {
-                                maxDist = deviationdistance,
-                                maxDistEnabled = deviationdistance >= 0, -- required to check maxDist
-                                targetTypes = GetCAPTargetTypes(engageHelos),
-                                priority = 0
-                            }
-                        },
-                        [3] = {
-                            number = 3,
-                            auto = false,
-                            id = "ControlledTask",
-                            enabled = true,
-                            params = {
-                                task = {
-                                    id = "Orbit",
-                                    params = {
-                                        altitude = altitude,
-                                        pattern = pattern,
-                                        speed = speed,
-                                    }
-                                },
-                                stopCondition = {
-                                    duration = durationBefore10,
-                                    condition = "return Spearhead.DcsUtil.IsBingoFuel(\"" .. groupName .. "\", 0.10)",
-                                }
-                            }
-                        },
-                        [4] = {
-                            number = 4,
-                            auto = false,
-                            id = "WrappedAction",
-                            enabled = "true",
-                            params = {
-                                action = {
-                                    id = "Script",
-                                    params = {
-                                        command = "pcall(Spearhead.Events.PublishRTBInTen, \"" .. groupName .. "\")"
-                                    }
-                                }
-                            }
-                        },
-                        [5] = {
-                            number = 5,
-                            auto = false,
-                            id = "ControlledTask",
-                            enabled = true,
-                            params = {
-                                task = {
-                                    id = "Orbit",
-                                    params = {
-                                        altitude = altitude,
-                                        pattern = pattern,
-                                        speed = speed,
-                                    }
-                                },
-                                stopCondition = {
-                                    duration = durationAfter10,
-                                    condition = "return Spearhead.DcsUtil.IsBingoFuel(\"" .. groupName .. "\")",
-                                }
-                            }
-                        },
-                        [6] = {
-                            number = 6,
-                            auto = false,
-                            id = "WrappedAction",
-                            enabled = "true",
-                            params = {
-                                action = {
-                                    id = "Script",
-                                    params = {
-                                        command = "pcall(Spearhead.Events.PublishRTB, \"" .. groupName .. "\")"
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    end
-
-    ---comment
-    ---@param position table { x, y}
-    ---@param altitude number
-    ---@param speed number
-    ---@param childTasks table
-    ---@return table
-    local FlyToPointTask = function(position, altitude, speed, childTasks)
-        return {
-            alt = altitude,
-            action = "Turning Point",
-            alt_type = "BARO",
-            speed = speed,
-            ETA = 0,
-            ETA_locked = false,
-            x = position.x,
-            y = position.z,
-            speed_locked = true,
-            formation_template = "",
-            task = {
-                id = "ComboTask",
-                params = {
-                    tasks = childTasks or {}
-                }
-            }
-        }
-    end
-
-    ---comment
-    ---@param groupName string groupName you're creating this route for
-    ---@param airdromeId number airdromeId
-    ---@param capPoint table { x, z }
-    ---@param altitude number
-    ---@param speed number
-    ---@param durationOnStation number
-    ---@param attackHelos boolean
-    ---@param deviationDistance number
-    ---@return table route
-    ROUTE_UTIL.createCapMission = function(groupName, airdromeId, capPoint, racetrackSecondPoint, altitude, speed,
-                                           durationOnStation, attackHelos, deviationDistance)
-        local baseName = Spearhead.DcsUtil.getAirbaseName(airdromeId)
-        if baseName == nil then
-            return {}
-        end
-
-        durationOnStation = durationOnStation or 1800
-        altitude = altitude or 3000
-        speed = speed or 130
-        attackHelos = attackHelos or false
-        deviationDistance = deviationDistance or 32186
-
-        local base = Airbase.getByName(baseName)
-        if base == nil then
-            return {}
-        end
-
-        local additionalFlyOverTasks = {
-            {
-                enabled = true,
-                auto = false,
-                id = "WrappedAction",
-                number = 1,
-                params = {
-                    action = {
-                        id = "Option",
-                        params = {
-                            variantIndex = 2,
-                            name = AI.Option.Air.id.FORMATION,
-                            formationIndex = 2,
-                            value = 131074
-                        }
-                    }
-                }
-            }
-        }
-
-        local orbitType = "Circle"
-        if racetrackSecondPoint then orbitType = "Race-Track" end
-
-        local basePoint = base:getPoint()
-        local points = {}
-        if racetrackSecondPoint == nil then
-            points = {
-                [1] = FlyToPointTask(capPoint, altitude, speed, additionalFlyOverTasks),
-                [2] = CapTask(groupName, capPoint, altitude, speed, durationOnStation, attackHelos, deviationDistance,
-                    orbitType),
-                [3] = RtbTask(airdromeId, basePoint, speed)
-            }
-        else
-            points = {
-                [1] = FlyToPointTask(capPoint, altitude, speed, additionalFlyOverTasks),
-                [2] = CapTask(groupName, capPoint, altitude, speed, durationOnStation, attackHelos, deviationDistance,
-                    orbitType),
-                [3] = FlyToPointTask(racetrackSecondPoint, altitude, speed, {}),
-                [4] = RtbTask(airdromeId, basePoint, speed)
-            }
-        end
-
-        return {
-            id = 'Mission',
-            params = {
-                airborne = true,
-                route = {
-                    points = points
-                }
-            }
-        }
-    end
-
-    ---Creates an RTB task. The first point is to trigger the TDCS OnRTB Event, the second task will be the actual RTB point
-    ---If any of the values are not met it will return nil
-    ---@param groupName string
-    ---@param airdromeId number
-    ---@param speed number
-    ---@return table?, string ComboTask
-    ROUTE_UTIL.CreateRTBMission = function(groupName, airdromeId, speed)
-        --[[
-            TODO: Test the creation and pubishing of event and the timing of said event
-        ]] --
-
-        local base = Spearhead.DcsUtil.getAirbaseById(airdromeId)
-        if base == nil then
-            return nil, "No airbase found for ID " .. tostring(airdromeId)
-        end
-
-        local group = Group.getByName(groupName)
-        local pos;
-        local i = 1
-        local units = group:getUnits()
-        while pos == nil and i <= Spearhead.Util.tableLength(units) do
-            local unit = units[i]
-            if unit and unit:isExist() == true and unit:inAir() == true then
-                pos = unit:getPoint()
-            end
-            i = i + 1
-        end
-
-        speed = speed or 130
-        if pos == nil then
-            return nil, "Could not find any unit in the air to set the RTB task"
-        end
-
-        local additionalFlyOverTasks = {
-            {
-                enabled = true,
-                auto = false,
-                id = "WrappedAction",
-                number = 1,
-                params = {
-                    action = {
-                        id = "Option",
-                        params = {
-                            variantIndex = 2,
-                            name = AI.Option.Air.id.FORMATION,
-                            formationIndex = 2,
-                            value = 131074
-                        }
-                    }
-                }
-            }
-        }
-
-        return {
-            id = "Mission",
-            params = {
-                airborne = true, -- RTB mission generally are given to airborne units
-                route = {
-                    points = {
-
-                        [1] = {
-                            alt = pos.y,
-                            action = "Turning Point",
-                            alt_type = "BARO",
-                            speed = speed,
-                            ETA = 0,
-                            ETA_locked = false,
-                            x = pos.x,
-                            y = pos.z,
-                            speed_locked = true,
-                            formation_template = "",
-                            task = {
-                                id = "ComboTask",
-                                params = {
-                                    tasks = {
-                                        [1] = {
-                                            number = 1,
-                                            auto = false,
-                                            id = "WrappedAction",
-                                            enabled = "true",
-                                            params = {
-                                                action = {
-                                                    id = "Script",
-                                                    params = {
-                                                        command = "pcall(Spearhead.Events.PublishRTB, \"" ..
-                                                            groupName .. "\")"
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        },
-                        [2] = FlyToPointTask(base:getPoint(), 600, speed, additionalFlyOverTasks),
-                        [3] = RtbTask(airdromeId, base:getPoint(), speed)
-                    }
-                }
-            }
-        }, ""
-    end
-
-    ROUTE_UTIL.CreateCarrierRacetrack = function(pointA, pointB)
-        return {
-            id = "Mission",
-            params = {
-                airborne = false,
-                route = {
-                    points = {
-                        [1] =
-                        {
-                            ["alt"] = -0,
-                            ["type"] = "Turning Point",
-                            ["ETA"] = 0,
-                            ["alt_type"] = "BARO",
-                            ["formation_template"] = "",
-                            ["y"] = pointA.z,
-                            ["x"] = pointA.x,
-                            ["ETA_locked"] = false,
-                            ["speed"] = 13.88888,
-                            ["action"] = "Turning Point",
-                            ["task"] =
-                            {
-                                ["id"] = "ComboTask",
-                                ["params"] =
-                                {
-                                    ["tasks"] = {},
-                                }, -- end of ["params"]
-                            }, -- end of ["task"]
-                            ["speed_locked"] = true,
-                        },
-                        [2] =
-                        {
-                            ["alt"] = -0,
-                            ["type"] = "Turning Point",
-                            ["ETA"] = -0,
-                            ["alt_type"] = "BARO",
-                            ["formation_template"] = "",
-                            ["y"] = pointB.z,
-                            ["x"] = pointB.x,
-                            ["ETA_locked"] = false,
-                            ["speed"] = 13.88888,
-                            ["action"] = "Turning Point",
-                            ["task"] =
-                            {
-                                ["id"] = "ComboTask",
-                                ["params"] =
-                                {
-                                    ["tasks"] =
-                                    {
-                                        [1] =
-                                        {
-                                            ["enabled"] = true,
-                                            ["auto"] = false,
-                                            ["id"] = "GoToWaypoint",
-                                            ["number"] = 1,
-                                            ["params"] =
-                                            {
-                                                ["fromWaypointIndex"] = 2,
-                                                ["nWaypointIndx"] = 1,
-                                            },
-                                        },
-                                    },
-                                },
-                            },
-                            ["speed_locked"] = true,
-                        }
-                    }
-                }
-            }
-        }, ""
-    end
-end
-
-if Spearhead == nil then Spearhead = {} end
-Spearhead.RouteUtil = ROUTE_UTIL
-end --spearhead_routeutil.lua
 do --spearhead_db.lua
 -- 3
 
@@ -2433,6 +2433,164 @@ end
 Spearhead.DB = SpearheadDB
 
 end --spearhead_db.lua
+do --GlobalFleetManager.lua
+
+
+local GlobalFleetManager = {}
+
+local fleetGroups = {}
+
+GlobalFleetManager.start = function(database)
+
+    local logger = Spearhead.LoggerTemplate:new("CARRIERFLEET", Spearhead.LoggerTemplate.LogLevelOptions.DEBUG)
+
+    local all_groups = Spearhead.DcsUtil.getAllGroupNames()
+    for _, groupName in pairs(all_groups) do
+        if Spearhead.Util.startswith(string.lower(groupName), "carriergroup" ) == true then
+            logger:info("Registering " .. groupName .. " as a managed fleet")
+            local carrierGroup = Spearhead.internal.FleetGroup:new(groupName, database, logger)
+            table.insert(fleetGroups, carrierGroup)
+        end
+    end
+end
+
+Spearhead.internal.GlobalFleetManager = GlobalFleetManager
+end --GlobalFleetManager.lua
+do --FleetGroup.lua
+local FleetGroup = {}
+
+function FleetGroup:new(fleetGroupName, database, logger)
+    local o = {}
+
+    setmetatable(o, { __index = self })
+
+    o.fleetGroupName = fleetGroupName
+    o.logger = logger
+
+    local split_name = Spearhead.Util.split_string(fleetGroupName, "_")
+    if Spearhead.Util.tableLength(split_name) < 2 then
+        Spearhead.AddMissionEditorWarning("CARRIERGROUP should have at least 2 parts. CARRIERGROUP_<fleetname>")
+        return nil
+    end
+    o.fleetNameIdentifier = split_name[2]
+
+    o.targetZonePerStage = {}
+    o.currentTargetZone = nil
+    o.pointsPerZone = {}
+
+    do --INIT
+        local carrierRouteZones = database:getCarrierRouteZones()
+        for _, zoneName in pairs(carrierRouteZones) do
+            if Spearhead.Util.strContains(string.lower(zoneName), "_".. string.lower(o.fleetNameIdentifier) .. "_" ) == true then
+                local zone = Spearhead.DcsUtil.getZoneByName(zoneName)
+                if zone and zone.zone_type == Spearhead.DcsUtil.ZoneType.Polygon then
+                    local split_string = Spearhead.Util.split_string(zoneName, "_")
+                    if Spearhead.Util.tableLength(split_string) < 3 then
+                        Spearhead.AddMissionEditorWarning(
+                            "CARRIERROUTE should at least have 3 parts. Check the documentation for: " .. zoneName)
+                    else
+                        local function GetTwoFurthestPoints(zone)
+                            local function getDist(a, b)
+                                return math.sqrt((b.x - a.x) ^ 2 + (b.z - a.z) ^ 2)
+                            end
+
+                            local biggest = nil
+                            local biggestA = nil
+                            local biggestB = nil
+
+                            for i = 1, 3 do
+                                for ii = i + 1, 4 do
+                                    local a = zone.verts[i]
+                                    local b = zone.verts[ii]
+                                    local dist = getDist(a, b)
+
+                                    if biggest == nil or dist > biggest then
+                                        biggestA = a
+                                        biggestB = b
+                                        biggest = dist
+                                    end
+                                end
+                            end
+                            return { x = biggestA.x, z = biggestA.z }, { x = biggestB.x, z = biggestB.z }
+                        end
+
+                        local function getMinMaxStage(namePart)
+                            if namePart == nil then
+                                return nil, nil
+                            end
+
+                            if Spearhead.Util.startswith(namePart, "%[") == true then
+                                namePart = Spearhead.Util.split_string(namePart, "[")[1]
+                            end
+
+                            if Spearhead.Util.strContains(namePart, "%]") == true then
+                                namePart = Spearhead.Util.split_string(namePart, "]")[1]
+                            end
+
+                            local split_numbers = Spearhead.Util.split_string(namePart, "-")
+                            if Spearhead.Util.tableLength(split_numbers) < 2  then
+                                Spearhead.AddMissionEditorWarning("CARRIERROUTE zone stage numbers not in the format _[<number>-<number>]: " .. zoneName)
+                                return nil, nil
+                            end
+
+                            local first = tonumber(split_numbers[1])
+                            local second = tonumber(split_numbers[2])
+
+                            if first == nil or second == nil  then
+                                Spearhead.AddMissionEditorWarning("CARRIERROUTE zone stage numbers not in the format _[<number>-<number>]: " .. zoneName)
+                                return nil, nil
+                            end
+                            return first, second
+                        end
+
+                        local pointA, pointB = GetTwoFurthestPoints(zone)
+                        local first, second = getMinMaxStage(split_string[3])
+                        if first ~= nil and second ~= nil then
+                            for i = first, second do
+                                o.targetZonePerStage[tostring(i)] = zoneName
+                            end
+                            o.pointsPerZone[zoneName] = { pointA = pointA, pointB = pointB }
+                        else
+                            Spearhead.AddMissionEditorWarning("CARRIERROUTE zone stage numbers not in the format _[<number>-<number>]: " .. zoneName)
+                        end
+                    end
+                else
+                    Spearhead.AddMissionEditorWarning("CARRIERROUTE cannot be a cilinder: " .. zoneName)
+                end
+            end
+        end
+    end
+
+    local SetTaskAsync = function(input, time)
+        local targetZone = input.targetZone
+        local task = input.task
+        local groupName = input.groupName
+        local logger = input.logger
+
+        local group = Group.getByName(groupName)
+        if group then
+            logger:info("Sending " .. fleetGroupName .. " to " .. targetZone)
+            group:getController():setTask(task)
+        end
+    end
+
+    o.OnStageNumberChanged = function(self, number)
+        local targetZone = self.targetZonePerStage[tostring(number)]
+        if targetZone and targetZone ~= self.currentTargetZone then
+            local points = self.pointsPerZone[targetZone]
+            local task  = Spearhead.RouteUtil.CreateCarrierRacetrack(points.pointA, points.pointB)
+            timer.scheduleFunction(SetTaskAsync, { task = task, targetZone = targetZone,  groupName = self.fleetGroupName, logger = self.logger }, timer.getTime() + 5)
+        end
+    end
+
+    Spearhead.Events.AddStageNumberChangedListener(o)
+    return o
+end
+
+if not Spearhead.internal then Spearhead.internal = {} end
+Spearhead.internal.FleetGroup = FleetGroup
+
+end --FleetGroup.lua
 do --Stage.lua
 
 local Stage = {}
@@ -2476,7 +2634,7 @@ do --init STAGE DIRECTOR
         o.db.blueAirbasegroups = {}
         o.db.airbaseIds = {}
         o.db.farps = {}
-        o.activeStage = 0
+        o.activeStage = -99
         o.preActivated = false
         o.stageConfig = stageConfig or {}
         o.stageDrawingId = stageDrawingId + 1
@@ -2574,7 +2732,6 @@ do --init STAGE DIRECTOR
             end
         end
 
-
         o.IsComplete = function(self)
             for i, mission in pairs(self.db.missions) do
                 local state = mission:GetState()
@@ -2583,6 +2740,19 @@ do --init STAGE DIRECTOR
                 end
             end
             return true
+        end
+
+        local CheckContinuousAsync = function(self, time)
+            self.logger:info("Checking stage completion for stage: " .. self.zoneName)
+            if self.activeStage == self.stageNumber then
+                return nil -- stop looping if this stage is not even active
+            end
+
+            if self:IsComplete() == true then
+                triggerStageCompleteListeners(self)
+                return nil
+            end
+            return time + 60
         end
 
         ---Activates all SAMS, Airbase units etc all at once.
@@ -2658,6 +2828,8 @@ do --init STAGE DIRECTOR
                 end
             end
             timer.scheduleFunction(activateMissionsIfApplicableAsync, self, timer.getTime() + 5)
+
+            timer.scheduleFunction(CheckContinuousAsync, self, timer.getTime() + 60)
         end
 
         o.ActivateMissionsIfApplicable = function (self)
@@ -2694,6 +2866,10 @@ do --init STAGE DIRECTOR
                         availableMissionsCount = availableMissionsCount - 1
                     end
                 end
+            end
+
+            if activeCount <= 0 and availableMissions <= 0 then
+                
             end
         end
 
@@ -2912,12 +3088,13 @@ local StagesByIndex = {}
 
 GlobalStageManager = {}
 function GlobalStageManager:NewAndStart(database, stageConfig)
-
+    local logger = Spearhead.LoggerTemplate:new("StageManager", stageConfig.logLevel)
     local o = {}
     setmetatable(o, { __index = self })
 
-    o.onStageCompleted = function(stage) 
+    o.logger = logger
 
+    o.onStageCompleted = function(self, stage) 
         local stageNumber = tostring(stage.stageNumber)
         local anyActive = false
         for _, stage in pairs(StagesByIndex[stageNumber] or {}) do
@@ -2930,7 +3107,7 @@ function GlobalStageManager:NewAndStart(database, stageConfig)
 
     end
 
-    local logger = Spearhead.LoggerTemplate:new("StageManager", stageConfig.logLevel)
+    
 
     for _, stageName in pairs(database:getStagezoneNames()) do
 
@@ -3339,6 +3516,39 @@ end
 if not Spearhead.internal then Spearhead.internal = {} end
 Spearhead.internal.Mission = Mission
 end --Mission.lua
+do --StageConfig.lua
+
+local StageConfig = {};
+function StageConfig:new()
+    local o = {}
+    setmetatable(o, { __index = self })
+
+    if SpearheadConfig == nil then SpearheadConfig = {} end
+    if SpearheadConfig.StageConfig == nil then SpearheadConfig.StageConfig = {} end
+
+    local enabled = SpearheadConfig.StageConfig.enabled or true
+    ---@return boolean
+    o.isEnabled = function(self) return enabled == true end
+
+    local drawStages = SpearheadConfig.StageConfig.drawStages or true
+    ---@return boolean
+    o.isDrawStagesEnabled = function(self) return drawStages == true end
+
+    local autoStages = SpearheadConfig.StageConfig.autoStages or true
+    ---@return boolean
+    o.isAutoStages = function(self) return autoStages end
+
+    local maxMissionsPerStage = SpearheadConfig.StageConfig.maxMissionStage
+    o.getMaxMissionsPerStage = function(self) return maxMissionsPerStage end
+
+    o.logLevel  = Spearhead.LoggerTemplate.LogLevelOptions.DEBUG
+    return o;
+end
+
+if not Spearhead.internal then Spearhead.internal = {} end
+if not Spearhead.internal.configuration then Spearhead.internal.configuration = {} end
+Spearhead.internal.configuration.StageConfig = StageConfig;
+end --StageConfig.lua
 do --CapConfig.lua
 
 
@@ -3398,164 +3608,183 @@ if not Spearhead.internal then Spearhead.internal = {} end
 if not Spearhead.internal.configuration then Spearhead.internal.configuration = {} end
 Spearhead.internal.configuration.CapConfig = CapConfig;
 end --CapConfig.lua
-do --StageConfig.lua
+do --CapAirbase.lua
 
-local StageConfig = {};
-function StageConfig:new()
-    local o = {}
+local CapBase = {}
+
+---comment
+---@param airbaseId number
+---@param database table
+---@param logger table
+---@param capConfig table
+---@param stageConfig table
+---@return table
+function CapBase:new(airbaseId, database, logger, capConfig, stageConfig)
+    local o  = {}
     setmetatable(o, { __index = self })
 
-    if SpearheadConfig == nil then SpearheadConfig = {} end
-    if SpearheadConfig.StageConfig == nil then SpearheadConfig.StageConfig = {} end
-
-    local enabled = SpearheadConfig.StageConfig.enabled or true
-    ---@return boolean
-    o.isEnabled = function(self) return enabled == true end
-
-    local drawStages = SpearheadConfig.StageConfig.drawStages or true
-    ---@return boolean
-    o.isDrawStagesEnabled = function(self) return drawStages == true end
-
-    local autoStages = SpearheadConfig.StageConfig.autoStages or true
-    ---@return boolean
-    o.isAutoStages = function(self) return autoStages end
-
-    local maxMissionsPerStage = SpearheadConfig.StageConfig.maxMissionStage
-    o.getMaxMissionsPerStage = function(self) return maxMissionsPerStage end
-
-    o.logLevel  = Spearhead.LoggerTemplate.LogLevelOptions.DEBUG
-    return o;
-end
-
-if not Spearhead.internal then Spearhead.internal = {} end
-if not Spearhead.internal.configuration then Spearhead.internal.configuration = {} end
-Spearhead.internal.configuration.StageConfig = StageConfig;
-end --StageConfig.lua
-do --FleetGroup.lua
-local FleetGroup = {}
-
-function FleetGroup:new(fleetGroupName, database, logger)
-    local o = {}
-
-    setmetatable(o, { __index = self })
-
-    o.fleetGroupName = fleetGroupName
+    o.groupNames = database:getCapGroupsAtAirbase(airbaseId)
+    o.database  = database
+    o.airbaseId = airbaseId
     o.logger = logger
+    o.activeStage = 0
+    o.capConfig = capConfig
+    o.activeCapStages = (stageConfig or {}).capActiveStages or 10
 
-    local split_name = Spearhead.Util.split_string(fleetGroupName, "_")
-    if Spearhead.Util.tableLength(split_name) < 2 then
-        Spearhead.AddMissionEditorWarning("CARRIERGROUP should have at least 2 parts. CARRIERGROUP_<fleetname>")
-        return nil
+    o.lastStatesByName = {}
+    o.groupsByName = {}
+    o.PrimaryGroups = {}
+    o.BackupGroups = {}
+
+    local CheckReschedulingAsync = function(self, time)
+        self:CheckAndScheduleCAP()
     end
-    o.fleetNameIdentifier = split_name[2]
 
-    o.targetZonePerStage = {}
-    o.currentTargetZone = nil
-    o.pointsPerZone = {}
+    o.OnGroupStateUpdated = function (self, capGroup)
+        --[[
+            There is no update needed for INTRANSIT, ONSTATION or REARMING as the PREVIOUS state already was checked and nothing changes in the actual overal state.
+        ]]--
+        if  capGroup.state == Spearhead.internal.CapGroup.GroupState.INTRANSIT 
+            or capGroup.state == Spearhead.internal.CapGroup.GroupState.ONSTATION 
+            or capGroup.state == Spearhead.internal.CapGroup.GroupState.REARMING
+        then
+            return
+        end
+        timer.scheduleFunction(CheckReschedulingAsync, self, timer.getTime() + 1)
+    end
 
-    do --INIT
-        local carrierRouteZones = database:getCarrierRouteZones()
-        for _, zoneName in pairs(carrierRouteZones) do
-            if Spearhead.Util.strContains(string.lower(zoneName), "_".. string.lower(o.fleetNameIdentifier) .. "_" ) == true then
-                local zone = Spearhead.DcsUtil.getZoneByName(zoneName)
-                if zone and zone.zone_type == Spearhead.DcsUtil.ZoneType.Polygon then
-                    local split_string = Spearhead.Util.split_string(zoneName, "_")
-                    if Spearhead.Util.tableLength(split_string) < 3 then
-                        Spearhead.AddMissionEditorWarning(
-                            "CARRIERROUTE should at least have 3 parts. Check the documentation for: " .. zoneName)
-                    else
-                        local function GetTwoFurthestPoints(zone)
-                            local function getDist(a, b)
-                                return math.sqrt((b.x - a.x) ^ 2 + (b.z - a.z) ^ 2)
-                            end
+    for key, name in pairs(o.groupNames) do
+        local capGroup = Spearhead.internal.CapGroup:new(name, airbaseId, logger, database, capConfig)
+        if capGroup then
+            o.groupsByName[name] = capGroup
 
-                            local biggest = nil
-                            local biggestA = nil
-                            local biggestB = nil
+            if capGroup.isBackup ==true then
+                table.insert(o.BackupGroups, capGroup)
+            else
+                table.insert(o.PrimaryGroups, capGroup)
+            end
 
-                            for i = 1, 3 do
-                                for ii = i + 1, 4 do
-                                    local a = zone.verts[i]
-                                    local b = zone.verts[ii]
-                                    local dist = getDist(a, b)
+            capGroup:AddOnStateUpdatedListener(o)
+        end
+    end
+    logger:info("Airbase with Id '" .. airbaseId .. "' has a total of " .. Spearhead.Util.tableLength(o.groupsByName) .. "cap flights registered")
 
-                                    if biggest == nil or dist > biggest then
-                                        biggestA = a
-                                        biggestB = b
-                                        biggest = dist
-                                    end
-                                end
-                            end
-                            return { x = biggestA.x, z = biggestA.z }, { x = biggestB.x, z = biggestB.z }
-                        end
+    o.SpawnIfApplicable = function(self)
+        self.logger:debug("Check spawns for airbase " .. self.airbaseId )
+        for groupName, capGroup in pairs(self.groupsByName) do
+            
+            local activeStage = tostring(self.activeStage)
+            local targetStage = capGroup:GetTargetZone(activeStage)
 
-                        local function getMinMaxStage(namePart)
-                            if namePart == nil then
-                                return nil, nil
-                            end
+            if targetStage ~= nil and capGroup.state == Spearhead.internal.CapGroup.GroupState.UNSPAWNED then
+                capGroup:SpawnOnTheRamp()
+            end
+        end
+    end
 
-                            if Spearhead.Util.startswith(namePart, "%[") == true then
-                                namePart = Spearhead.Util.split_string(namePart, "[")[1]
-                            end
+    o.CheckAndScheduleCAP = function (self)
 
-                            if Spearhead.Util.strContains(namePart, "%]") == true then
-                                namePart = Spearhead.Util.split_string(namePart, "]")[1]
-                            end
+        self.logger:debug("Check taskings for airbase " .. self.airbaseId )
+        
+        local countPerStage = {}
+        local requiredPerStage = {}
 
-                            local split_numbers = Spearhead.Util.split_string(namePart, "-")
-                            if Spearhead.Util.tableLength(split_numbers) < 2  then
-                                Spearhead.AddMissionEditorWarning("CARRIERROUTE zone stage numbers not in the format _[<number>-<number>]: " .. zoneName)
-                                return nil, nil
-                            end
+        --Count back up groups that are active or reassign to the new zone if that's needed
+        for _, backupGroup in pairs(self.BackupGroups) do
+            if backupGroup.state == Spearhead.internal.CapGroup.GroupState.INTRANSIT or backupGroup.state == Spearhead.internal.CapGroup.GroupState.ONSTATION then
+                local supposedTargetStage = backupGroup:GetTargetZone(self.activeStage)
+                if supposedTargetStage then
+                    if supposedTargetStage ~= backupGroup.assignedStageNumber then
+                        backupGroup:SendToStage(supposedTargetStage)
+                    end
+    
+                    if countPerStage[supposedTargetStage] == nil then
+                        countPerStage[supposedTargetStage] = 0
+                    end
+                    countPerStage[supposedTargetStage] = countPerStage[supposedTargetStage] + 1
+                else
+                    backupGroup:SendRTBAndDespawn()
+                end
+            elseif backupGroup.state == Spearhead.internal.CapGroup.GroupState.RTBINTEN and backupGroup:GetTargetZone(self.activeStage) ~= backupGroup.assignedStageNumber then
+                backupGroup:SendRTB()
+            end
+        end
 
-                            local first = tonumber(split_numbers[1])
-                            local second = tonumber(split_numbers[2])
+        --Schedule or reassign primary units if applicable
+        for _, primaryGroup in pairs(self.PrimaryGroups) do
+            local supposedTargetStage = primaryGroup:GetTargetZone(self.activeStage)
+            if supposedTargetStage then
+                if requiredPerStage[supposedTargetStage] == nil then
+                    requiredPerStage[supposedTargetStage] = 0
+                end
 
-                            if first == nil or second == nil  then
-                                Spearhead.AddMissionEditorWarning("CARRIERROUTE zone stage numbers not in the format _[<number>-<number>]: " .. zoneName)
-                                return nil, nil
-                            end
-                            return first, second
-                        end
+                if countPerStage[supposedTargetStage] == nil
+                 then
+                    countPerStage[supposedTargetStage] = 0
+                end
 
-                        local pointA, pointB = GetTwoFurthestPoints(zone)
-                        local first, second = getMinMaxStage(split_string[3])
-                        if first ~= nil and second ~= nil then
-                            for i = first, second do
-                                o.targetZonePerStage[tostring(i)] = zoneName
-                            end
-                            o.pointsPerZone[zoneName] = { pointA = pointA, pointB = pointB }
+                requiredPerStage[supposedTargetStage] =  requiredPerStage[supposedTargetStage] + 1
+
+                if primaryGroup.state == Spearhead.internal.CapGroup.GroupState.READYONRAMP then
+                    if countPerStage[supposedTargetStage] < requiredPerStage[supposedTargetStage] then
+                        primaryGroup:SendToStage(supposedTargetStage)
+                        countPerStage[supposedTargetStage] = countPerStage[supposedTargetStage] + 1
+                    end
+                elseif primaryGroup.state == Spearhead.internal.CapGroup.GroupState.INTRANSIT or primaryGroup.state == Spearhead.internal.CapGroup.GroupState.ONSTATION then
+                    if supposedTargetStage ~= primaryGroup.assignedStageNumber then
+                        if countPerStage[supposedTargetStage] < requiredPerStage[supposedTargetStage] then
+                            primaryGroup:SendToStage(supposedTargetStage)
                         else
-                            Spearhead.AddMissionEditorWarning("CARRIERROUTE zone stage numbers not in the format _[<number>-<number>]: " .. zoneName)
+                            countPerStage[supposedTargetStage] = countPerStage[supposedTargetStage] + 1
+                            primaryGroup:SendRTB()
                         end
                     end
+                    countPerStage[supposedTargetStage] = countPerStage[supposedTargetStage] + 1
+                elseif primaryGroup.state == Spearhead.internal.CapGroup.GroupState.RTBINTEN and primaryGroup:GetTargetZone(self.activeStage) ~= primaryGroup.assignedStageNumber then
+                    primaryGroup:SendRTB()
+                end
+            else
+                primaryGroup:SendRTBAndDespawn()
+            end
+        end
+
+        for _, backupGroup in pairs(self.BackupGroups) do
+            if backupGroup.state == Spearhead.internal.CapGroup.GroupState.READYONRAMP then
+                local supposedTargetStage = backupGroup:GetTargetZone(self.activeStage)
+                if supposedTargetStage then
+                    if countPerStage[supposedTargetStage] == nil then
+                        countPerStage[supposedTargetStage] = 0
+                    end
+    
+                    if countPerStage[supposedTargetStage] < requiredPerStage[supposedTargetStage] then
+                        backupGroup:SendToStage(supposedTargetStage)
+                        countPerStage[supposedTargetStage] = countPerStage[supposedTargetStage] + 1
+                    end
                 else
-                    Spearhead.AddMissionEditorWarning("CARRIERROUTE cannot be a cilinder: " .. zoneName)
+                    backupGroup:SendRTBAndDespawn()
                 end
             end
         end
     end
 
-    local SetTaskAsync = function(input, time)
-        local targetZone = input.targetZone
-        local task = input.task
-        local groupName = input.groupName
-        local logger = input.logger
-
-        local group = Group.getByName(groupName)
-        if group then
-            logger:info("Sending " .. fleetGroupName .. " to " .. targetZone)
-            group:getController():setTask(task)
-        end
+    o.OnStageNumberChanged = function (self, number)
+        self.activeStage = number
+        self:SpawnIfApplicable()
+        timer.scheduleFunction(CheckReschedulingAsync, self, timer.getTime() + 5)
     end
 
-    o.OnStageNumberChanged = function(self, number)
-        local targetZone = self.targetZonePerStage[tostring(number)]
-        if targetZone and targetZone ~= self.currentTargetZone then
-            local points = self.pointsPerZone[targetZone]
-            local task  = Spearhead.RouteUtil.CreateCarrierRacetrack(points.pointA, points.pointB)
-            timer.scheduleFunction(SetTaskAsync, { task = task, targetZone = targetZone,  groupName = self.fleetGroupName, logger = self.logger }, timer.getTime() + 5)
+    ---Check if any CAP is active when a certain stage is active
+    ---@param self table
+    ---@param stageNumber number
+    ---@return boolean
+    o.IsBaseActiveWhenStageIsActive = function (self, stageNumber)
+        for _, group in pairs(self.PrimaryGroups) do
+            local target = group:GetTargetZone(stageNumber)
+            if target ~= nil then
+                return true
+            end
         end
+        return false
     end
 
     Spearhead.Events.AddStageNumberChangedListener(o)
@@ -3563,32 +3792,8 @@ function FleetGroup:new(fleetGroupName, database, logger)
 end
 
 if not Spearhead.internal then Spearhead.internal = {} end
-Spearhead.internal.FleetGroup = FleetGroup
-
-end --FleetGroup.lua
-do --GlobalFleetManager.lua
-
-
-local GlobalFleetManager = {}
-
-local fleetGroups = {}
-
-GlobalFleetManager.start = function(database)
-
-    local logger = Spearhead.LoggerTemplate:new("CARRIERFLEET", Spearhead.LoggerTemplate.LogLevelOptions.DEBUG)
-
-    local all_groups = Spearhead.DcsUtil.getAllGroupNames()
-    for _, groupName in pairs(all_groups) do
-        if Spearhead.Util.startswith(string.lower(groupName), "carriergroup" ) == true then
-            logger:info("Registering " .. groupName .. " as a managed fleet")
-            local carrierGroup = Spearhead.internal.FleetGroup:new(groupName, database, logger)
-            table.insert(fleetGroups, carrierGroup)
-        end
-    end
-end
-
-Spearhead.internal.GlobalFleetManager = GlobalFleetManager
-end --GlobalFleetManager.lua
+Spearhead.internal.CapAirbase = CapBase
+end --CapAirbase.lua
 do --GlobalCapManager.lua
 local GlobalCapManager = {}
 do
@@ -4059,192 +4264,6 @@ if not Spearhead.internal then Spearhead.internal = {} end
 Spearhead.internal.CapGroup = CapGroup
 
 end --CapGroup.lua
-do --CapAirbase.lua
-
-local CapBase = {}
-
----comment
----@param airbaseId number
----@param database table
----@param logger table
----@param capConfig table
----@param stageConfig table
----@return table
-function CapBase:new(airbaseId, database, logger, capConfig, stageConfig)
-    local o  = {}
-    setmetatable(o, { __index = self })
-
-    o.groupNames = database:getCapGroupsAtAirbase(airbaseId)
-    o.database  = database
-    o.airbaseId = airbaseId
-    o.logger = logger
-    o.activeStage = 0
-    o.capConfig = capConfig
-    o.activeCapStages = (stageConfig or {}).capActiveStages or 10
-
-    o.lastStatesByName = {}
-    o.groupsByName = {}
-    o.PrimaryGroups = {}
-    o.BackupGroups = {}
-
-    local CheckReschedulingAsync = function(self, time)
-        self:CheckAndScheduleCAP()
-    end
-
-    o.OnGroupStateUpdated = function (self, capGroup)
-        --[[
-            There is no update needed for INTRANSIT, ONSTATION or REARMING as the PREVIOUS state already was checked and nothing changes in the actual overal state.
-        ]]--
-        if  capGroup.state == Spearhead.internal.CapGroup.GroupState.INTRANSIT 
-            or capGroup.state == Spearhead.internal.CapGroup.GroupState.ONSTATION 
-            or capGroup.state == Spearhead.internal.CapGroup.GroupState.REARMING
-        then
-            return
-        end
-        timer.scheduleFunction(CheckReschedulingAsync, self, timer.getTime() + 1)
-    end
-
-    for key, name in pairs(o.groupNames) do
-        local capGroup = Spearhead.internal.CapGroup:new(name, airbaseId, logger, database, capConfig)
-        if capGroup then
-            o.groupsByName[name] = capGroup
-
-            if capGroup.isBackup ==true then
-                table.insert(o.BackupGroups, capGroup)
-            else
-                table.insert(o.PrimaryGroups, capGroup)
-            end
-
-            capGroup:AddOnStateUpdatedListener(o)
-        end
-    end
-    logger:info("Airbase with Id '" .. airbaseId .. "' has a total of " .. Spearhead.Util.tableLength(o.groupsByName) .. "cap flights registered")
-
-    o.SpawnIfApplicable = function(self)
-        self.logger:debug("Check spawns for airbase " .. self.airbaseId )
-        for groupName, capGroup in pairs(self.groupsByName) do
-            
-            local activeStage = tostring(self.activeStage)
-            local targetStage = capGroup:GetTargetZone(activeStage)
-
-            if targetStage ~= nil and capGroup.state == Spearhead.internal.CapGroup.GroupState.UNSPAWNED then
-                capGroup:SpawnOnTheRamp()
-            end
-        end
-    end
-
-    o.CheckAndScheduleCAP = function (self)
-
-        self.logger:debug("Check taskings for airbase " .. self.airbaseId )
-        
-        local countPerStage = {}
-        local requiredPerStage = {}
-
-        --Count back up groups that are active or reassign to the new zone if that's needed
-        for _, backupGroup in pairs(self.BackupGroups) do
-            if backupGroup.state == Spearhead.internal.CapGroup.GroupState.INTRANSIT or backupGroup.state == Spearhead.internal.CapGroup.GroupState.ONSTATION then
-                local supposedTargetStage = backupGroup:GetTargetZone(self.activeStage)
-                if supposedTargetStage then
-                    if supposedTargetStage ~= backupGroup.assignedStageNumber then
-                        backupGroup:SendToStage(supposedTargetStage)
-                    end
-    
-                    if countPerStage[supposedTargetStage] == nil then
-                        countPerStage[supposedTargetStage] = 0
-                    end
-                    countPerStage[supposedTargetStage] = countPerStage[supposedTargetStage] + 1
-                else
-                    backupGroup:SendRTBAndDespawn()
-                end
-            elseif backupGroup.state == Spearhead.internal.CapGroup.GroupState.RTBINTEN and backupGroup:GetTargetZone(self.activeStage) ~= backupGroup.assignedStageNumber then
-                backupGroup:SendRTB()
-            end
-        end
-
-        --Schedule or reassign primary units if applicable
-        for _, primaryGroup in pairs(self.PrimaryGroups) do
-            local supposedTargetStage = primaryGroup:GetTargetZone(self.activeStage)
-            if supposedTargetStage then
-                if requiredPerStage[supposedTargetStage] == nil then
-                    requiredPerStage[supposedTargetStage] = 0
-                end
-
-                if countPerStage[supposedTargetStage] == nil
-                 then
-                    countPerStage[supposedTargetStage] = 0
-                end
-
-                requiredPerStage[supposedTargetStage] =  requiredPerStage[supposedTargetStage] + 1
-
-                if primaryGroup.state == Spearhead.internal.CapGroup.GroupState.READYONRAMP then
-                    if countPerStage[supposedTargetStage] < requiredPerStage[supposedTargetStage] then
-                        primaryGroup:SendToStage(supposedTargetStage)
-                        countPerStage[supposedTargetStage] = countPerStage[supposedTargetStage] + 1
-                    end
-                elseif primaryGroup.state == Spearhead.internal.CapGroup.GroupState.INTRANSIT or primaryGroup.state == Spearhead.internal.CapGroup.GroupState.ONSTATION then
-                    if supposedTargetStage ~= primaryGroup.assignedStageNumber then
-                        if countPerStage[supposedTargetStage] < requiredPerStage[supposedTargetStage] then
-                            primaryGroup:SendToStage(supposedTargetStage)
-                        else
-                            countPerStage[supposedTargetStage] = countPerStage[supposedTargetStage] + 1
-                            primaryGroup:SendRTB()
-                        end
-                    end
-                    countPerStage[supposedTargetStage] = countPerStage[supposedTargetStage] + 1
-                elseif primaryGroup.state == Spearhead.internal.CapGroup.GroupState.RTBINTEN and primaryGroup:GetTargetZone(self.activeStage) ~= primaryGroup.assignedStageNumber then
-                    primaryGroup:SendRTB()
-                end
-            else
-                primaryGroup:SendRTBAndDespawn()
-            end
-        end
-
-        for _, backupGroup in pairs(self.BackupGroups) do
-            if backupGroup.state == Spearhead.internal.CapGroup.GroupState.READYONRAMP then
-                local supposedTargetStage = backupGroup:GetTargetZone(self.activeStage)
-                if supposedTargetStage then
-                    if countPerStage[supposedTargetStage] == nil then
-                        countPerStage[supposedTargetStage] = 0
-                    end
-    
-                    if countPerStage[supposedTargetStage] < requiredPerStage[supposedTargetStage] then
-                        backupGroup:SendToStage(supposedTargetStage)
-                        countPerStage[supposedTargetStage] = countPerStage[supposedTargetStage] + 1
-                    end
-                else
-                    backupGroup:SendRTBAndDespawn()
-                end
-            end
-        end
-    end
-
-    o.OnStageNumberChanged = function (self, number)
-        self.activeStage = number
-        self:SpawnIfApplicable()
-        timer.scheduleFunction(CheckReschedulingAsync, self, timer.getTime() + 5)
-    end
-
-    ---Check if any CAP is active when a certain stage is active
-    ---@param self table
-    ---@param stageNumber number
-    ---@return boolean
-    o.IsBaseActiveWhenStageIsActive = function (self, stageNumber)
-        for _, group in pairs(self.PrimaryGroups) do
-            local target = group:GetTargetZone(stageNumber)
-            if target ~= nil then
-                return true
-            end
-        end
-        return false
-    end
-
-    Spearhead.Events.AddStageNumberChangedListener(o)
-    return o
-end
-
-if not Spearhead.internal then Spearhead.internal = {} end
-Spearhead.internal.CapAirbase = CapBase
-end --CapAirbase.lua
 
 --Single player purpose
 
@@ -4269,15 +4288,12 @@ local SetStageDelayed = function(number, time)
     return nil
 end
 
-timer.scheduleFunction(SetStageDelayed, 1, timer.getTime() + 3)
+timer.scheduleFunction(SetStageDelayed, 0, timer.getTime() + 3)
 
 Spearhead.LoadingDone()
 --Check lines of code in directory per file: 
 -- Get-ChildItem . -Include *.lua -Recurse | foreach {""+(Get-Content $_).Count + " => " + $_.name }; && GCI . -Include *.lua* -Recurse | foreach{(GC $_).Count} | measure-object -sum |  % Sum  
 -- find . -name '*.lua' | xargs wc -l
-
-
-
 
 --- ==================== DEBUG ORDER OR ZONE VEC ===========================
 -- local zone = Spearhead.DcsUtil.getZoneByName("MISSIONSTAGE_99")
