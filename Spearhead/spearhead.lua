@@ -1,5 +1,5 @@
 --[[
-        Spearhead Compile Time: 2024-10-23T14:15:27.557793
+        Spearhead Compile Time: 2024-10-23T14:16:48.738040
     ]]
 do --spearhead_events.lua
 
@@ -4304,7 +4304,7 @@ local SetStageDelayed = function(number, time)
     return nil
 end
 
-timer.scheduleFunction(SetStageDelayed, 0, timer.getTime() + 3)
+timer.scheduleFunction(SetStageDelayed, 1, timer.getTime() + 3)
 
 Spearhead.LoadingDone()
 --Check lines of code in directory per file: 
