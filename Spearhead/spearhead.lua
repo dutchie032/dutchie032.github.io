@@ -1,5 +1,5 @@
 --[[
-        Spearhead Compile Time: 2024-10-23T11:33:44.992750
+        Spearhead Compile Time: 2024-10-23T11:59:41.528486
     ]]
 do --spearhead_events.lua
 
@@ -3107,8 +3107,6 @@ function GlobalStageManager:NewAndStart(database, stageConfig)
 
     end
 
-    
-
     for _, stageName in pairs(database:getStagezoneNames()) do
 
         local stagelogger = Spearhead.LoggerTemplate:new(stageName, stageConfig.logLevel)
@@ -3526,15 +3524,18 @@ function StageConfig:new()
     if SpearheadConfig == nil then SpearheadConfig = {} end
     if SpearheadConfig.StageConfig == nil then SpearheadConfig.StageConfig = {} end
 
-    local enabled = SpearheadConfig.StageConfig.enabled or true
+    local enabled = SpearheadConfig.StageConfig.enabled
+    if enabled == nil then enabled = true end
     ---@return boolean
     o.isEnabled = function(self) return enabled == true end
 
-    local drawStages = SpearheadConfig.StageConfig.drawStages or true
+    local drawStages = SpearheadConfig.StageConfig.drawStages
+    if drawStages == nil then drawStages = true end
     ---@return boolean
     o.isDrawStagesEnabled = function(self) return drawStages == true end
 
     local autoStages = SpearheadConfig.StageConfig.autoStages or true
+    if autoStages == nil then autoStages = true end
     ---@return boolean
     o.isAutoStages = function(self) return autoStages end
 
@@ -3542,6 +3543,16 @@ function StageConfig:new()
     o.getMaxMissionsPerStage = function(self) return maxMissionsPerStage end
 
     o.logLevel  = Spearhead.LoggerTemplate.LogLevelOptions.DEBUG
+
+    o.toString = function()
+        return Spearhead.Util.toString({
+            maxMissionsPerStage = maxMissionsPerStage,
+            enabled = enabled, 
+            drawStages = drawStages,
+            autoStages = autoStages
+        })
+    end
+
     return o;
 end
 
@@ -3560,7 +3571,8 @@ function CapConfig:new()
     if SpearheadConfig == nil then SpearheadConfig = {} end
     if SpearheadConfig.CapConfig == nil then SpearheadConfig.CapConfig = {} end
 
-    local enabled = SpearheadConfig.CapConfig.enabled or true
+    local enabled = SpearheadConfig.CapConfig.enabled
+    if enabled == nil then enabled = true end
     ---@return boolean
     o.isEnabled = function(self) return enabled == true end
 
@@ -4274,10 +4286,14 @@ if id == 0 then
 end
 
 local dbLogger = Spearhead.LoggerTemplate:new("database", Spearhead.LoggerTemplate.LogLevelOptions.INFO)
+local standardLogger = Spearhead.LoggerTemplate:new("", Spearhead.LoggerTemplate.LogLevelOptions.INFO)
 local databaseManager = Spearhead.DB:new(dbLogger, debug)
 
 local capConfig = Spearhead.internal.configuration.CapConfig:new();
 local stageConfig = Spearhead.internal.configuration.StageConfig:new();
+
+standardLogger:info("Using StageConfig: ".. stageConfig:toString())
+
 
 Spearhead.internal.GlobalCapManager.start(databaseManager, capConfig, stageConfig)
 Spearhead.internal.GlobalStageManager:NewAndStart(databaseManager, stageConfig)
