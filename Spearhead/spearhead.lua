@@ -1,5 +1,5 @@
 --[[
-        Spearhead Compile Time: 2024-10-23T13:49:51.360838
+        Spearhead Compile Time: 2024-10-23T13:50:09.037058
     ]]
 do --spearhead_events.lua
 
@@ -80,7 +80,7 @@ do
     ---@param unitLostListener table Object with function: OnUnitLost(initiatorUnit)
     SpearheadEvents.addOnUnitLostEventListener = function(unitName, unitLostListener)
         if type(unitLostListener) ~= "table" then
-            SpearheadLogger:warn("Unit lost Event listener not of type table/object")
+            warn("Unit lost Event listener not of type table/object")
             return
         end
 
