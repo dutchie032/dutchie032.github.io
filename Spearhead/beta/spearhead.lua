@@ -1,5 +1,5 @@
 --[[
-        Spearhead Compile Time: 2024-11-06T08:12:50.473520
+        Spearhead Compile Time: 2024-11-06T08:52:05.151904
     ]]
 do --spearhead_events.lua
 
@@ -306,13 +306,15 @@ do
 
         local function CheckAndTriggerSpawnAsync(unit, time)
             local function isPlayer(unit)
-
-                if unit and unit:isExist() then
-                    if Spearhead.DcsUtil.IsGroupStatic(unit:getName()) == true then
+                if unit == nil then return false, "unit is nil" end
+                if unit:isExist() ~= true then return false, "unit does not exist" end
+                local group = unit:getGroup()
+                if group ~= nil then
+                    if Spearhead.DcsUtil.IsGroupStatic(group:getName()) == true then
                         return false
                     end
 
-                    if AI_GROUPS[unit:getGroup():getName()] == true then
+                    if AI_GROUPS[group:getName()] == true then
                         return false
                     end
 
@@ -323,15 +325,15 @@ do
                             return true
                         end
                     end
-                    AI_GROUPS[unit:getGroup():getName()] = true
+                    AI_GROUPS[group:getName()] = true
                 end
-                return false
+                return false, "unit is nil or does not exist"
             end
 
-            if isPlayer(event.initiator) == true then
-                local groupId = event.initiator:getGroup():getID()
+            if isPlayer(unit) == true then
+                local groupId = unit:getGroup():getID()
                 SpearheadEvents.AddCommandsToGroup(groupId)
-                SpearheadEvents.TriggerPlayerEntersUnit(event.initiator)
+                SpearheadEvents.TriggerPlayerEntersUnit(unit)
             end
 
             return nil
@@ -1264,7 +1266,7 @@ do     -- INIT DCS_UTIL
             return DCS_UTIL.__miz_groups[groupName].category == 5;
         end
 
-        return Group.getByName(groupName) == nil
+        return StaticObject.getByName(groupName) ~= nil
     end
 
     ---comment
@@ -1558,7 +1560,7 @@ do     -- INIT DCS_UTIL
     ---@return table units
     function DCS_UTIL.getAllPlayerUnits()
         local units = {}
-        for key, value in pairs({ 1, 2, 3 }) do
+        for key, value in pairs({ 0, 1, 2 }) do
             local players = coalition.getPlayers(value)
             for key, unit in pairs(players) do
                 units[#units + 1] = unit
@@ -1606,7 +1608,7 @@ do     -- INIT DCS_UTIL
     function DCS_UTIL.getAllPlayerGroups()
         local groupNames = {}
         local result = {}
-        for key, value in pairs({ 1, 2, 3 }) do
+        for key, value in pairs({ 0, 1, 2 }) do
             local players = coalition.getPlayers(value)
             for key, unit in pairs(players) do
                 local group = unit:getGroup()
