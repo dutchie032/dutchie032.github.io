@@ -1,5 +1,5 @@
 --[[
-        Spearhead Compile Time: 2024-11-06T07:11:35.596765
+        Spearhead Compile Time: 2024-11-06T07:31:01.062706
     ]]
 do --spearhead_events.lua
 
@@ -304,26 +304,27 @@ do
 
         local AI_GROUPS = {}
 
-        if event.id == world.event.S_EVENT_BIRTH then
-
+        local function CheckAndTriggerSpawnAsync(unit, time)
             local function isPlayer(unit)
-                if Spearhead.DcsUtil.IsGroupStatic(unit:getName()) == true then
-                    return false
-                end
 
-                if AI_GROUPS[unit:getGroup():getName()] == true then
-                    return false
-                end
-
-                local players = Spearhead.DcsUtil.getAllPlayerUnits()
-                local unitName = unit:getName()
-                for i, unit in (players) do
-                    if unit:getName() == unitName then
-                        return true
+                if unit and unit:isExist() then
+                    if Spearhead.DcsUtil.IsGroupStatic(unit:getName()) == true then
+                        return false
                     end
-                end
 
-                AI_GROUPS[unit:getGroup():getName()] = true
+                    if AI_GROUPS[unit:getGroup():getName()] == true then
+                        return false
+                    end
+
+                    local players = Spearhead.DcsUtil.getAllPlayerUnits()
+                    local unitName = unit:getName()
+                    for i, unit in (players) do
+                        if unit:getName() == unitName then
+                            return true
+                        end
+                    end
+                    AI_GROUPS[unit:getGroup():getName()] = true
+                end
                 return false
             end
 
@@ -332,6 +333,12 @@ do
                 SpearheadEvents.AddCommandsToGroup(groupId)
                 SpearheadEvents.TriggerPlayerEntersUnit(event.initiator)
             end
+
+            return nil
+        end
+
+        if event.id == world.event.S_EVENT_BIRTH then
+            timer.scheduleFunction(CheckAndTriggerSpawnAsync, event.initiator, timer.getTime() + 3)
         end
     end
 
@@ -2472,7 +2479,7 @@ local fleetGroups = {}
 
 GlobalFleetManager.start = function(database)
 
-    local logger = Spearhead.LoggerTemplate:new("CARRIERFLEET", Spearhead.LoggerTemplate.LogLevelOptions.DEBUG)
+    local logger = Spearhead.LoggerTemplate:new("CARRIERFLEET", Spearhead.LoggerTemplate.LogLevelOptions.INFO)
 
     local all_groups = Spearhead.DcsUtil.getAllGroupNames()
     for _, groupName in pairs(all_groups) do
@@ -3588,7 +3595,7 @@ function StageConfig:new()
     local maxMissionsPerStage = SpearheadConfig.StageConfig.maxMissionStage
     o.getMaxMissionsPerStage = function(self) return maxMissionsPerStage end
 
-    o.logLevel  = Spearhead.LoggerTemplate.LogLevelOptions.DEBUG
+    o.logLevel  = Spearhead.LoggerTemplate.LogLevelOptions.INFO
 
     o.toString = function()
         return Spearhead.Util.toString({
