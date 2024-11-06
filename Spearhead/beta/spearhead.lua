@@ -1,5 +1,5 @@
 --[[
-        Spearhead Compile Time: 2024-11-06T09:46:25.678888
+        Spearhead Compile Time: 2024-11-06T10:06:48.655475
     ]]
 do --spearhead_events.lua
 
@@ -320,7 +320,7 @@ do
 
                     local players = Spearhead.DcsUtil.getAllPlayerUnits()
                     local unitName = unit:getName()
-                    for i, unit in (players) do
+                    for i, unit in pairs(players) do
                         if unit:getName() == unitName then
                             return true
                         end
