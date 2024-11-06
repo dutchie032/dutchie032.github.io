@@ -1,5 +1,5 @@
 --[[
-        Spearhead Compile Time: 2024-11-06T10:06:48.655475
+        Spearhead Compile Time: 2024-11-06T13:02:26.517687
     ]]
 do --spearhead_events.lua
 
@@ -3088,6 +3088,7 @@ do --init STAGE DIRECTOR
             mission:AddMissionCompleteListener(o)
         end
 
+        Spearhead.Events.AddOnPlayerEnterUnitListener(o)
         Spearhead.Events.AddOnStatusRequestReceivedListener(o)
         Spearhead.Events.AddStageNumberChangedListener(o)
         return o
