@@ -1,5 +1,5 @@
 --[[
-        Spearhead Compile Time: 2024-10-23T16:22:49.996522
+        Spearhead Compile Time: 2024-11-06T13:59:34.259841
     ]]
 do --spearhead_events.lua
 
@@ -238,7 +238,7 @@ do
     do -- PLAYER ENTER UNIT
         local playerEnterUnitListeners = {}
         ---comment
-        ---@param listener table object with OnPlayerEnterUnit(self, unit)
+        ---@param listener table object with OnPlayerEntersUnit(self, unit)
         SpearheadEvents.AddOnPlayerEnterUnitListener = function(listener)
             if type(listener) ~= "table" then
                 warn("Unit lost Event listener not of type table/object")
@@ -253,7 +253,7 @@ do
                 if playerEnterUnitListeners then
                     for _, callable in pairs(playerEnterUnitListeners) do
                         local succ, err = pcall(function()
-                            callable:OnPlayerEnterUnit(unit)
+                            callable:OnPlayerEntersUnit(unit)
                         end)
                         if err then
                            error(err)
@@ -302,10 +302,45 @@ do
             end
         end
 
-        if event.id == world.event.S_EVENT_PLAYER_ENTER_UNIT then
-            env.info("blaat player entering unit")
-            local groupId = event.initiator:getGroup():getID()
-            SpearheadEvents.AddCommandsToGroup(groupId)
+        local AI_GROUPS = {}
+
+        local function CheckAndTriggerSpawnAsync(unit, time)
+            local function isPlayer(unit)
+                if unit == nil then return false, "unit is nil" end
+                if unit:isExist() ~= true then return false, "unit does not exist" end
+                local group = unit:getGroup()
+                if group ~= nil then
+                    if Spearhead.DcsUtil.IsGroupStatic(group:getName()) == true then
+                        return false
+                    end
+
+                    if AI_GROUPS[group:getName()] == true then
+                        return false
+                    end
+
+                    local players = Spearhead.DcsUtil.getAllPlayerUnits()
+                    local unitName = unit:getName()
+                    for i, unit in pairs(players) do
+                        if unit:getName() == unitName then
+                            return true
+                        end
+                    end
+                    AI_GROUPS[group:getName()] = true
+                end
+                return false, "unit is nil or does not exist"
+            end
+
+            if isPlayer(unit) == true then
+                local groupId = unit:getGroup():getID()
+                SpearheadEvents.AddCommandsToGroup(groupId)
+                SpearheadEvents.TriggerPlayerEntersUnit(unit)
+            end
+
+            return nil
+        end
+
+        if event.id == world.event.S_EVENT_BIRTH then
+            timer.scheduleFunction(CheckAndTriggerSpawnAsync, event.initiator, timer.getTime() + 3)
         end
     end
 
@@ -1227,7 +1262,11 @@ do     -- INIT DCS_UTIL
     ---checks if the groupname is a static group
     ---@param groupName any
     function DCS_UTIL.IsGroupStatic(groupName)
-        return DCS_UTIL.__miz_groups[groupName].category == 5;
+        if DCS_UTIL.__miz_groups[groupName] then
+            return DCS_UTIL.__miz_groups[groupName].category == 5;
+        end
+
+        return StaticObject.getByName(groupName) ~= nil
     end
 
     ---comment
@@ -1521,8 +1560,8 @@ do     -- INIT DCS_UTIL
     ---@return table units
     function DCS_UTIL.getAllPlayerUnits()
         local units = {}
-        for key, value in pairs({ 1, 2, 3 }) do
-            local players = coalition.getPlayers(value)
+        for i = 0,2 do
+            local players = coalition.getPlayers(i)
             for key, unit in pairs(players) do
                 units[#units + 1] = unit
             end
@@ -1560,29 +1599,6 @@ do     -- INIT DCS_UTIL
         local result = DCS_UTIL.__airportsStartingCoalition[baseId]
         if result == nil then
             result = DCS_UTIL.__warehouseStartingCoalition[baseId]
-        end
-        return result
-    end
-
-    ---Gets all groups that have players
-    ---@return table groups
-    function DCS_UTIL.getAllPlayerGroups()
-        local groupNames = {}
-        local result = {}
-        for key, value in pairs({ 1, 2, 3 }) do
-            local players = coalition.getPlayers(value)
-            for key, unit in pairs(players) do
-                local group = unit:getGroup()
-                if group ~= nil then
-                    local name = group:getName()
-                    if name ~= nil then
-                        if groupNames[name] ~= nil then
-                            groupNames[name] = 1
-                            table.insert(result, group)
-                        end
-                    end
-                end
-            end
         end
         return result
     end
@@ -2105,6 +2121,7 @@ do -- DB
                                 functionString = functionString .. "{0,1,0,1}, {0,1,0,1}, 1)"
 
                                 env.info(functionString)
+---@diagnostic disable-next-line: deprecated
                                 local f, err = loadstring(functionString)
                                 if f then
                                     f()
@@ -2445,7 +2462,7 @@ local fleetGroups = {}
 
 GlobalFleetManager.start = function(database)
 
-    local logger = Spearhead.LoggerTemplate:new("CARRIERFLEET", Spearhead.LoggerTemplate.LogLevelOptions.DEBUG)
+    local logger = Spearhead.LoggerTemplate:new("CARRIERFLEET", Spearhead.LoggerTemplate.LogLevelOptions.INFO)
 
     local all_groups = Spearhead.DcsUtil.getAllGroupNames()
     for _, groupName in pairs(all_groups) do
@@ -3071,6 +3088,7 @@ do --init STAGE DIRECTOR
             mission:AddMissionCompleteListener(o)
         end
 
+        Spearhead.Events.AddOnPlayerEnterUnitListener(o)
         Spearhead.Events.AddOnStatusRequestReceivedListener(o)
         Spearhead.Events.AddStageNumberChangedListener(o)
         return o
@@ -3316,16 +3334,34 @@ do -- INIT Mission Class
             timer.scheduleFunction(CheckAndUpdate, self, timer.getTime() + 300)
         end
 
-        local CleanupDelayedAsync = function (self, time)
-            self:Cleanup()
-            return nil
-        end
-
         ---comment
         ---@param self table
         ---@param checkUnitHealth boolean?
         o.CheckAndUpdateSelf = function(self, checkUnitHealth)
             if not checkUnitHealth then checkUnitHealth = false end
+
+            if checkUnitHealth == true then
+                local function unitAliveState(unitName)
+                    local unit = Unit.getByName(unitName)
+                    return unit ~= nil and unit:isExist() == true and unit:getLife() > 0.1
+                end
+
+                for groupName, unitNameDict in pairs(self.groupUnitAliveDict) do
+                    for unitName, isAlive in pairs(unitNameDict) do
+                        if isAlive == true then
+                            self.groupUnitAliveDict[groupName][unitName] = unitAliveState(unitName)
+                        end
+                    end
+                end
+
+                for groupName, unitNameDict in pairs(self.targetAliveStates) do
+                    for unitName, isAlive in pairs(unitNameDict) do
+                        if isAlive == true then
+                            self.targetAliveStates[groupName][unitName] = unitAliveState(unitName)
+                        end
+                    end
+                end
+            end
 
             if self.missionState == Mission.MissionState.COMPLETED then
                 return
@@ -3543,7 +3579,7 @@ function StageConfig:new()
     local maxMissionsPerStage = SpearheadConfig.StageConfig.maxMissionStage
     o.getMaxMissionsPerStage = function(self) return maxMissionsPerStage end
 
-    o.logLevel  = Spearhead.LoggerTemplate.LogLevelOptions.DEBUG
+    o.logLevel  = Spearhead.LoggerTemplate.LogLevelOptions.INFO
 
     o.toString = function()
         return Spearhead.Util.toString({
