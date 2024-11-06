@@ -1,5 +1,5 @@
 --[[
-        Spearhead Compile Time: 2024-11-06T07:31:01.062706
+        Spearhead Compile Time: 2024-11-06T08:12:50.473520
     ]]
 do --spearhead_events.lua
 
@@ -1260,7 +1260,11 @@ do     -- INIT DCS_UTIL
     ---checks if the groupname is a static group
     ---@param groupName any
     function DCS_UTIL.IsGroupStatic(groupName)
-        return DCS_UTIL.__miz_groups[groupName].category == 5;
+        if DCS_UTIL.__miz_groups[groupName] then
+            return DCS_UTIL.__miz_groups[groupName].category == 5;
+        end
+
+        return Group.getByName(groupName) == nil
     end
 
     ---comment
