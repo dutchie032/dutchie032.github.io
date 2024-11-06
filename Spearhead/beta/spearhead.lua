@@ -1,5 +1,5 @@
 --[[
-        Spearhead Compile Time: 2024-11-06T13:02:26.517687
+        Spearhead Compile Time: 2024-11-06T13:16:58.237322
     ]]
 do --spearhead_events.lua
 
@@ -238,7 +238,7 @@ do
     do -- PLAYER ENTER UNIT
         local playerEnterUnitListeners = {}
         ---comment
-        ---@param listener table object with OnPlayerEnterUnit(self, unit)
+        ---@param listener table object with OnPlayerEntersUnit(self, unit)
         SpearheadEvents.AddOnPlayerEnterUnitListener = function(listener)
             if type(listener) ~= "table" then
                 warn("Unit lost Event listener not of type table/object")
@@ -253,7 +253,7 @@ do
                 if playerEnterUnitListeners then
                     for _, callable in pairs(playerEnterUnitListeners) do
                         local succ, err = pcall(function()
-                            callable:OnPlayerEnterUnit(unit)
+                            callable:OnPlayerEntersUnit(unit)
                         end)
                         if err then
                            error(err)
