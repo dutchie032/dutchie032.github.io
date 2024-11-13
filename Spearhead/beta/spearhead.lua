@@ -1,5 +1,5 @@
 --[[
-        Spearhead Compile Time: 2024-11-06T13:16:58.237322
+        Spearhead Compile Time: 2024-11-13T12:17:14.109009
     ]]
 do --spearhead_events.lua
 
@@ -1827,6 +1827,7 @@ do -- DB
             o.tables.farp_zones = {}
             o.tables.cap_route_zones = {}
             o.tables.carrier_route_zones = {}
+            o.tables.blue_sams = {}
 
             o.tables.stage_zonesByNumer = {}
             o.tables.stage_numberPerzone = {}
@@ -1868,6 +1869,10 @@ do -- DB
                     if string.lower(split_string[1]) == "carrierroute" then
                         table.insert(o.tables.carrier_route_zones, zone_name)
                     end
+
+                    if string.lower(split_string[1]) == "bluesam" then
+                        table.insert(o.tables.blue_sams, zone_name)
+                    end
                 end
             end
 
@@ -1901,6 +1906,21 @@ do -- DB
                 end
             end
 
+            o.tables.blueSamZonesPerStage = {}
+            for _, stageZoneName in pairs(o.tables.stage_zones) do
+            
+                if o.tables.blueSamZonesPerStage[stageZoneName] == nil then
+                    o.tables.blueSamZonesPerStage[stageZoneName] = {}
+                end
+                
+                for _, blueSamStageName in pairs(o.tables.blue_sams) do
+                   
+                    if Spearhead.DcsUtil.isZoneInZone(blueSamStageName, stageZoneName) == true then
+                        table.insert(o.tables.blueSamZonesPerStage[stageZoneName], blueSamStageName)
+                    end
+                end
+            end
+            
             o.tables.missionZonesPerStage = {}
             for key, missionZone in pairs(o.tables.mission_zones) do
                 local found = false
@@ -2056,6 +2076,21 @@ do -- DB
                 end
             end
 
+
+            o.tables.samUnitsPerSamZone = {}
+            local loadBlueSamUnits = function()
+                local all_groups = getAvailableGroups()
+                for _, blueSamZone in pairs(o.tables.blue_sams) do
+                    o.tables.samUnitsPerSamZone[blueSamZone] = {}
+                    local groups = Spearhead.DcsUtil.getGroupsInZone(all_groups, blueSamZone)
+                    for _, groupName in pairs(groups) do
+                        is_group_taken[groupName] = true
+                        table.insert(o.tables.samUnitsPerSamZone[blueSamZone], groupName)
+                    end
+                end
+            end
+
+
             --- missionZoneName <> groupname[]
             o.tables.groupsInMissionZone = {}
             local loadMissionzoneUnits = function()
@@ -2192,6 +2227,7 @@ do -- DB
             end
 
             loadCapUnits()
+            loadBlueSamUnits()
             loadMissionzoneUnits()
             loadRandomMissionzoneUnits()
             loadFarpGroups()
@@ -2370,7 +2406,6 @@ do -- DB
             return self.tables.descriptions[missionZoneName] or ""
         end
 
-        ---comment
         ---@param self table
         ---@param stageName string
         ---@return table result airbase IDs. Use Spearhead.DcsUtil.getAirbaseById
@@ -2382,12 +2417,25 @@ do -- DB
             return self.tables.farpZonesPerStage[stageName]
         end
 
-        ---comment
         ---@param self table
         ---@param airbaseId number
         ---@return table
         o.getCapGroupsAtAirbase = function(self, airbaseId)
             return self.tables.capGroupsOnAirbase[airbaseId] or {}
+        end
+
+        ---@param self table
+        ---@param stageName string
+        ---@return table
+        o.getBlueSamsInStage = function(self, stageName)
+            return self.tables.blueSamZonesPerStage[stageName] or {}
+        end
+
+        ---@param self table
+        ---@param samZone string
+        ---@return table
+        o.getBlueSamGroupsInZone = function(self, samZone)
+            return self.tables.samUnitsPerSamZone[samZone] or {}
         end
 
         o.getRedGroupsAtAirbase = function(self, airbaseId)
@@ -2653,6 +2701,7 @@ do --init STAGE DIRECTOR
         o.db.sams = {}
         o.db.redAirbasegroups = {}
         o.db.blueAirbasegroups = {}
+        o.db.blueSamGroups = {}
         o.db.airbaseIds = {}
         o.db.farps = {}
         o.activeStage = -99
@@ -2717,6 +2766,13 @@ do --init STAGE DIRECTOR
                         table.insert(o.db.blueAirbasegroups, groupName)
                         Spearhead.DcsUtil.DestroyGroup(groupName)
                     end
+                end
+            end
+
+            for _, samZoneName in pairs(database:getBlueSamsInStage(o.zoneName)) do
+                for _, samGroup in pairs(database:getBlueSamGroupsInZone(samZoneName)) do
+                    table.insert(o.db.blueSamGroups, samGroup)
+                    Spearhead.DcsUtil.DestroyGroup(samGroup)
                 end
             end
 
@@ -2916,6 +2972,10 @@ do --init STAGE DIRECTOR
                 self:MarkStage(true)
             end)
 
+            for _, blueSamGroupName in pairs(self.db.blueSamGroups) do
+                Spearhead.DcsUtil.SpawnGroupTemplate(blueSamGroupName)
+            end
+
             for key, airbaseId in pairs(self.db.airbaseIds) do
                 local airbase = Spearhead.DcsUtil.getAirbaseById(airbaseId)
 
@@ -2931,6 +2991,7 @@ do --init STAGE DIRECTOR
                     end
                 end
             end
+            return nil
         end
 
         ---Sets airfields to blue and spawns friendly farps
@@ -4341,7 +4402,7 @@ local SetStageDelayed = function(number, time)
     return nil
 end
 
-timer.scheduleFunction(SetStageDelayed, 1, timer.getTime() + 3)
+timer.scheduleFunction(SetStageDelayed, 2, timer.getTime() + 3)
 
 Spearhead.LoadingDone()
 --Check lines of code in directory per file: 
