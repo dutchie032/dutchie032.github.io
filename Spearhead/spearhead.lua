@@ -1,5 +1,5 @@
 --[[
-        Spearhead Compile Time: 2024-12-01T20:02:05.935288
+        Spearhead Compile Time: 2024-12-11T18:58:00.592493
     ]]
 do --spearhead_events.lua
 
@@ -307,6 +307,8 @@ do
         local function CheckAndTriggerSpawnAsync(unit, time)
             local function isPlayer(unit)
                 if unit == nil then return false, "unit is nil" end
+                if unit.getGroup == nil then return false, 'no get group function in unit object, most likely static' end
+
                 if unit:isExist() ~= true then return false, "unit does not exist" end
                 local group = unit:getGroup()
                 if group ~= nil then
@@ -814,6 +816,712 @@ end
 if Spearhead == nil then Spearhead = {} end
 Spearhead.RouteUtil = ROUTE_UTIL
 end --spearhead_routeutil.lua
+do --spearhead_db.lua
+-- 3
+
+local SpearheadDB = {}
+do -- DB
+    local singleton = nil
+
+    ---comment
+    ---@param Logger table
+    ---@return table
+    function SpearheadDB:new(Logger, debug)
+        if not debug then debug = false end
+        if singleton ~= nil then
+            Logger:info("Returning an already initiated instance of SpearheadDB")
+            return singleton
+        end
+
+        local o = {}
+        setmetatable(o, { __index = self })
+
+        o.Logger = Logger
+        o.tables = {}
+        do --INIT ALL TABLES
+            Logger:debug("Initiating tables")
+
+            o.tables.all_zones = {}
+            o.tables.stage_zones = {}
+            o.tables.mission_zones = {}
+            o.tables.random_mission_zones = {}
+            o.tables.farp_zones = {}
+            o.tables.cap_route_zones = {}
+            o.tables.carrier_route_zones = {}
+            o.tables.blue_sams = {}
+
+            o.tables.stage_zonesByNumer = {}
+            o.tables.stage_numberPerzone = {}
+
+            do -- INIT ZONE TABLES
+                for zone_ind, zone_data in pairs(Spearhead.DcsUtil.__trigger_zones) do
+                    local zone_name = zone_data.name
+                    local split_string = Spearhead.Util.split_string(zone_name, "_")
+                    table.insert(o.tables.all_zones, zone_name)
+
+                    if string.lower(split_string[1]) == "missionstage" then
+                        table.insert(o.tables.stage_zones, zone_name)
+                        if split_string[2] then
+                            local stringified = tostring(split_string[2]) or "unknown"
+                            if o.tables.stage_zonesByNumer[stringified] == nil then
+                                o.tables.stage_zonesByNumer[stringified] = {}
+                            end
+                            table.insert(o.tables.stage_zonesByNumer[stringified], zone_name)
+                            o.tables.stage_numberPerzone[zone_name] = stringified
+                        end
+                    end
+
+                    if string.lower(split_string[1]) == "mission" then
+                        table.insert(o.tables.mission_zones, zone_name)
+                    end
+
+                    if string.lower(split_string[1]) == "randommission" then
+                        table.insert(o.tables.random_mission_zones, zone_name)
+                    end
+
+                    if string.lower(split_string[1]) == "farp" then
+                        table.insert(o.tables.farp_zones, zone_name)
+                    end
+
+                    if string.lower(split_string[1]) == "caproute" then
+                        table.insert(o.tables.cap_route_zones, zone_name)
+                    end
+
+                    if string.lower(split_string[1]) == "carrierroute" then
+                        table.insert(o.tables.carrier_route_zones, zone_name)
+                    end
+
+                    if string.lower(split_string[1]) == "bluesam" then
+                        table.insert(o.tables.blue_sams, zone_name)
+                    end
+                end
+            end
+
+            Logger:debug("initiated zone tables, continuing with descriptions")
+            o.tables.descriptions = {}
+            do --load markers
+                if env.mission.drawings and env.mission.drawings.layers then
+                    for i, layer in pairs(env.mission.drawings.layers) do
+                        if string.lower(layer.name) == "author" then
+                            for key, layer_object in pairs(layer.objects) do
+                                local inZone = Spearhead.DcsUtil.isPositionInZones(layer_object.mapX, layer_object.mapY,
+                                    o.tables.mission_zones)
+                                if Spearhead.Util.tableLength(inZone) >= 1 then
+                                    local name = inZone[1]
+                                    if name ~= nil then
+                                        o.tables.descriptions[name] = layer_object.text
+                                    end
+                                end
+
+                                local inZone = Spearhead.DcsUtil.isPositionInZones(layer_object.mapX, layer_object.mapY,
+                                    o.tables.random_mission_zones)
+                                if Spearhead.Util.tableLength(inZone) >= 1 then
+                                    local name = inZone[1]
+                                    if name ~= nil then
+                                        o.tables.descriptions[name] = layer_object.text
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+
+            o.tables.blueSamZonesPerStage = {}
+            for _, stageZoneName in pairs(o.tables.stage_zones) do
+            
+                if o.tables.blueSamZonesPerStage[stageZoneName] == nil then
+                    o.tables.blueSamZonesPerStage[stageZoneName] = {}
+                end
+                
+                for _, blueSamStageName in pairs(o.tables.blue_sams) do
+                   
+                    if Spearhead.DcsUtil.isZoneInZone(blueSamStageName, stageZoneName) == true then
+                        table.insert(o.tables.blueSamZonesPerStage[stageZoneName], blueSamStageName)
+                    end
+                end
+            end
+            
+            o.tables.missionZonesPerStage = {}
+            for key, missionZone in pairs(o.tables.mission_zones) do
+                local found = false
+                local i = 1
+                while found == false and i <= Spearhead.Util.tableLength(o.tables.stage_zones) do
+                    local stageZone = o.tables.stage_zones[i]
+                    if Spearhead.DcsUtil.isZoneInZone(missionZone, stageZone) == true then
+                        if o.tables.missionZonesPerStage[stageZone] == nil then
+                            o.tables.missionZonesPerStage[stageZone] = {}
+                        end
+                        table.insert(o.tables.missionZonesPerStage[stageZone], missionZone)
+                    end
+                    i = i + 1
+                end
+            end
+
+            o.tables.randomMissionZonesPerStage = {}
+            for key, missionZone in pairs(o.tables.random_mission_zones) do
+                local found = false
+                local i = 1
+                while found == false and i <= Spearhead.Util.tableLength(o.tables.stage_zones) do
+                    local stageZone = o.tables.stage_zones[i]
+                    if Spearhead.DcsUtil.isZoneInZone(missionZone, stageZone) == true then
+                        if o.tables.randomMissionZonesPerStage[stageZone] == nil then
+                            o.tables.randomMissionZonesPerStage[stageZone] = {}
+                        end
+                        table.insert(o.tables.randomMissionZonesPerStage[stageZone], missionZone)
+                    end
+                    i = i + 1
+                end
+            end
+
+            local isAirbaseInZone = {}
+            o.tables.airbasesPerStage = {}
+            o.tables.farpIdsInFarpZones = {}
+            local airbases = world.getAirbases()
+            for _, airbase in pairs(airbases) do
+                local baseId = airbase:getID()
+                local point = airbase:getPoint()
+                local found = false
+                for _, zoneName in pairs(o.tables.stage_zones) do
+                    if found == false then
+                        if Spearhead.DcsUtil.isPositionInZone(point.x, point.z, zoneName) == true then
+                            found = true
+                            local baseIdString = tostring(baseId) or "nil"
+                            isAirbaseInZone[baseIdString] = true
+
+                            if airbase:getDesc().category == 0 then
+                                --Airbase
+                                if Spearhead.DcsUtil.getStartingCoalition(baseId) == 2 then
+                                    airbase:setCoalition(1)
+                                    airbase:autoCapture(false)
+                                end
+
+                                if o.tables.airbasesPerStage[zoneName] == nil then
+                                    o.tables.airbasesPerStage[zoneName] = {}
+                                end
+
+                                table.insert(o.tables.airbasesPerStage[zoneName], baseId)
+                            else
+                                -- farp
+                                local i = 1
+                                local farpFound = false
+                                while farpFound == false and i <= Spearhead.Util.tableLength(o.tables.farp_zones) do
+                                    local farpZoneName = o.tables.farp_zones[i]
+                                    if Spearhead.DcsUtil.isPositionInZone(point.x, point.z, farpZoneName) == true then
+                                        farpFound = true
+
+                                        if o.tables.farpIdsInFarpZones[farpZoneName] == nil then
+                                            o.tables.farpIdsInFarpZones[farpZoneName] = {}
+                                        end
+
+                                        airbase:setCoalition(1)
+                                        airbase:autoCapture(false)
+                                        table.insert(o.tables.farpIdsInFarpZones[farpZoneName], baseIdString)
+                                    end
+                                    i = i + 1
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+
+
+
+            o.tables.farpZonesPerStage = {}
+            for _, farpZoneName in pairs(o.tables.farp_zones) do
+                local findFirst = function(farpZoneName)
+                    for _, stage_zone in pairs(o.tables.stage_zones) do
+                        if Spearhead.DcsUtil.isZoneInZone(farpZoneName, stage_zone) then
+                            return stage_zone
+                        end
+                    end
+                    return nil
+                end
+
+                local found = findFirst(farpZoneName)
+                if found then
+                    if o.tables.farpZonesPerStage[found] == nil then
+                        o.tables.farpZonesPerStage[found] = {}
+                    end
+
+                    table.insert(o.tables.farpZonesPerStage[found], farpZoneName)
+                end
+            end
+
+
+            local is_group_taken = {}
+            do
+                local all_groups = Spearhead.DcsUtil.getAllGroupNames()
+                for _, value in pairs(all_groups) do
+                    is_group_taken[value] = false
+                end
+            end
+
+            local getAvailableGroups = function()
+                local result = {}
+                for name, value in pairs(is_group_taken) do
+                    if value == false then
+                        table.insert(result, name)
+                    end
+                end
+                return result
+            end
+
+            local getAvailableCAPGroups = function()
+                local result = {}
+                for name, value in pairs(is_group_taken) do
+                    if value == false and Spearhead.Util.startswith(name, "CAP") then
+                        table.insert(result, name)
+                    end
+                end
+                return result
+            end
+
+            --- airbaseId <> groupname[]
+            o.tables.capGroupsOnAirbase = {}
+            local loadCapUnits = function()
+                local all_groups = getAvailableCAPGroups()
+                local airbases = world.getAirbases()
+                for _, airbase in pairs(airbases) do
+                    local baseId = airbase:getID()
+                    local point = airbase:getPoint()
+                    local zone = Spearhead.DcsUtil.getAirbaseZoneById(baseId) or
+                    { x = point.x, z = point.z, radius = 4000 }
+                    o.tables.capGroupsOnAirbase[baseId] = {}
+                    local groups = Spearhead.DcsUtil.areGroupsInCustomZone(all_groups, zone)
+                    for _, groupName in pairs(groups) do
+                        is_group_taken[groupName] = true
+                        table.insert(o.tables.capGroupsOnAirbase[baseId], groupName)
+                    end
+                end
+            end
+
+
+            o.tables.samUnitsPerSamZone = {}
+            local loadBlueSamUnits = function()
+                local all_groups = getAvailableGroups()
+                for _, blueSamZone in pairs(o.tables.blue_sams) do
+                    o.tables.samUnitsPerSamZone[blueSamZone] = {}
+                    local groups = Spearhead.DcsUtil.getGroupsInZone(all_groups, blueSamZone)
+                    for _, groupName in pairs(groups) do
+                        is_group_taken[groupName] = true
+                        table.insert(o.tables.samUnitsPerSamZone[blueSamZone], groupName)
+                    end
+                end
+            end
+
+
+            --- missionZoneName <> groupname[]
+            o.tables.groupsInMissionZone = {}
+            local loadMissionzoneUnits = function()
+                local all_groups = getAvailableGroups()
+                for _, missionZoneName in pairs(o.tables.mission_zones) do
+                    o.tables.groupsInMissionZone[missionZoneName] = {}
+                    local groups = Spearhead.DcsUtil.getGroupsInZone(all_groups, missionZoneName)
+                    for _, groupName in pairs(groups) do
+                        is_group_taken[groupName] = true
+                        table.insert(o.tables.groupsInMissionZone[missionZoneName], groupName)
+                    end
+                end
+            end
+
+            --- missionZoneName <> groupname[]
+            o.tables.groupsInRandomMissions = {}
+            local loadRandomMissionzoneUnits = function()
+                local all_groups = getAvailableGroups()
+                for _, missionZoneName in pairs(o.tables.random_mission_zones) do
+                    o.tables.groupsInRandomMissions[missionZoneName] = {}
+                    local groups = Spearhead.DcsUtil.getGroupsInZone(all_groups, missionZoneName)
+                    for _, groupName in pairs(groups) do
+                        is_group_taken[groupName] = true
+                        table.insert(o.tables.groupsInRandomMissions[missionZoneName], groupName)
+                    end
+                end
+            end
+
+            --- farpZoneName <> groupname[]
+            o.tables.groupsInFarpZone = {}
+            local loadFarpGroups = function()
+                local all_groups = getAvailableGroups()
+                for _, farpZone in pairs(o.tables.farp_zones) do
+                    o.tables.groupsInFarpZone[farpZone] = {}
+                    local groups = Spearhead.DcsUtil.getGroupsInZone(all_groups, farpZone)
+                    for _, groupName in pairs(groups) do
+                        is_group_taken[groupName] = true
+                        table.insert(o.tables.groupsInFarpZone[farpZone], groupName)
+                    end
+                end
+            end
+
+            --- farpZoneName <> groupname[]
+            o.tables.redAirbaseGroupsPerAirbase = {}
+            o.tables.blueAirbaseGroupsPerAirbase = {}
+            local loadAirbaseGroups = function()
+                local all_groups = getAvailableGroups()
+                local airbases = world.getAirbases()
+                for _, airbase in pairs(airbases) do
+                    local baseId = tostring(airbase:getID())
+                    local point = airbase:getPoint()
+                    local airbaseZone = Spearhead.DcsUtil.getAirbaseZoneById(baseId) or
+                    { x = point.x, z = point.z, radius = 4000 }
+
+                    if isAirbaseInZone[tostring(baseId) or "something"] == true and airbaseZone and airbase:getDesc().category == Airbase.Category.AIRDROME then
+                        if debug then
+                            if airbaseZone.zone_type == Spearhead.DcsUtil.ZoneType.Polygon then
+                                local functionString = "trigger.action.markupToAll(7, -1, " .. baseId + 300 .. ","
+                                for _, vecpoint in pairs(airbaseZone.verts) do
+                                    functionString = functionString .. " { x=" .. vecpoint.x .. ", y=0,z=" .. vecpoint.z ..
+                                    "},"
+                                end
+                                functionString = functionString .. "{0,1,0,1}, {0,0,0,0}, 1)"
+
+                                env.info(functionString)
+---@diagnostic disable-next-line: deprecated
+                                local f, err = loadstring(functionString)
+                                if f then
+                                    f()
+                                else
+                                    env.info(err)
+                                end
+                            else
+                                trigger.action.circleToAll(-1, baseId, { x = point.x, y = 0, z = point.z }, 2048,
+                                    { 1, 0, 0, 1 }, { 0, 0, 0, 0 }, 1, true)
+                            end
+                        end
+
+
+                        o.tables.redAirbaseGroupsPerAirbase[baseId] = {}
+                        o.tables.blueAirbaseGroupsPerAirbase[baseId] = {}
+                        local groups = Spearhead.DcsUtil.areGroupsInCustomZone(all_groups, airbaseZone)
+                        for _, groupName in pairs(groups) do
+                            if Spearhead.DcsUtil.IsGroupStatic(groupName) == true then
+                                local object = StaticObject.getByName(groupName)
+                                if object then
+                                    if object:getCoalition() == coalition.side.RED then
+                                        table.insert(o.tables.redAirbaseGroupsPerAirbase[baseId], groupName)
+                                        is_group_taken[groupName] = true
+                                    elseif object:getCoalition() == coalition.side.BLUE then
+                                        table.insert(o.tables.blueAirbaseGroupsPerAirbase[baseId], groupName)
+                                        is_group_taken[groupName] = true
+                                    end
+                                end
+                            else
+                                local group = Group.getByName(groupName)
+                                if group then
+                                    if group:getCoalition() == coalition.side.RED then
+                                        table.insert(o.tables.redAirbaseGroupsPerAirbase[baseId], groupName)
+                                        is_group_taken[groupName] = true
+                                    elseif group:getCoalition() == coalition.side.BLUE then
+                                        table.insert(o.tables.blueAirbaseGroupsPerAirbase[baseId], groupName)
+                                        is_group_taken[groupName] = true
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+
+            o.tables.miscGroupsInStages = {}
+            local loadMiscGroupsInStages = function()
+                local all_groups = getAvailableGroups()
+                for _, stage_zone in pairs(o.tables.stage_zones) do
+                    o.tables.miscGroupsInStages[stage_zone] = {}
+                    local groups = Spearhead.DcsUtil.getGroupsInZone(all_groups, stage_zone)
+                    for _, groupName in pairs(groups) do
+                        if Spearhead.DcsUtil.IsGroupStatic(groupName) == true then
+                            local object = StaticObject.getByName(groupName)
+                            if object and object:getCoalition() ~= coalition.side.NEUTRAL then
+                                is_group_taken[groupName] = true
+                                table.insert(o.tables.miscGroupsInStages[stage_zone], groupName)
+                            end
+                        else
+                            local group = Group.getByName(groupName)
+                            if group and group:getCoalition() ~= coalition.side.NEUTRAL then
+                                is_group_taken[groupName] = true
+                                table.insert(o.tables.miscGroupsInStages[stage_zone], groupName)
+                            end
+                        end
+                    end
+                end
+            end
+
+            loadCapUnits()
+            loadBlueSamUnits()
+            loadMissionzoneUnits()
+            loadRandomMissionzoneUnits()
+            loadFarpGroups()
+            loadAirbaseGroups()
+            loadMiscGroupsInStages()
+
+            -- local cleanup = function () --CLean up all groups that are now managed inside zones by spearhead
+
+            --     local count = 0
+            --     for name, taken in pairs(is_group_taken) do
+            --         if taken == true then
+            --             Spearhead.DcsUtil.DestroyGroup(name)
+            --             count = count + 1
+            --         end
+            --     end
+            --     Logger:info("Destroyed " .. count .. " units that are now managed in zones by Spearhead")
+            -- end
+            -- cleanup()
+
+            --- key: zoneName value: { current, routes = [ { point1, point2 } ] }
+            o.tables.capRoutesPerStageNumber = {}
+            for _, zoneName in pairs(o.tables.stage_zones) do
+                local number = tostring(o.tables.stage_numberPerzone[zoneName] or "unknown")
+
+                if o.tables.capRoutesPerStageNumber[number] == nil then
+                    o.tables.capRoutesPerStageNumber[number] = {
+                        current = 0,
+                        routes = {}
+                    }
+                end
+
+                for _, cap_route_zone in pairs(o.tables.cap_route_zones) do
+                    if Spearhead.DcsUtil.isZoneInZone(cap_route_zone, zoneName) == true then
+                        local zone = Spearhead.DcsUtil.getZoneByName(cap_route_zone)
+                        if zone then
+                            if zone.zone_type == Spearhead.DcsUtil.ZoneType.Cilinder then
+                                table.insert(o.tables.capRoutesPerStageNumber[number].routes,
+                                    { point1 = { x = zone.x, z = zone.z }, point2 = nil })
+                            else
+                                local function getDist(a, b)
+                                    return math.sqrt((b.x - a.x) ^ 2 + (b.z - a.z) ^ 2)
+                                end
+
+                                local biggest = nil
+                                local biggestA = nil
+                                local biggestB = nil
+
+                                for i = 1, 3 do
+                                    for ii = i + 1, 4 do
+                                        local a = zone.verts[i]
+                                        local b = zone.verts[ii]
+                                        local dist = getDist(a, b)
+
+                                        if biggest == nil or dist > biggest then
+                                            biggestA = a
+                                            biggestB = b
+                                            biggest = dist
+                                        end
+                                    end
+                                end
+
+                                if biggestA and biggestB then
+                                    table.insert(o.tables.capRoutesPerStageNumber[number].routes,
+                                        {
+                                            point1 = { x = biggestA.x, z = biggestA.z },
+                                            point2 = { x = biggestB.x, z = biggestB.z }
+                                        })
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+
+            o.Logger:debug(o.tables.capRoutesPerStageNumber)
+
+            o.tables.missionCodes = {}
+        end
+
+        o.GetDescriptionForMission = function(self, missionZoneName)
+            return self.tables.descriptions[missionZoneName]
+        end
+
+        o.getCapRouteInZone = function(self, stageNumber, baseId)
+            local stageNumber = tostring(stageNumber) or "nothing"
+            local routeData = self.tables.capRoutesPerStageNumber[stageNumber]
+            if routeData then
+                local count = Spearhead.Util.tableLength(routeData.routes)
+                if count > 0 then
+                    routeData.current = routeData.current + 1
+                    if count < routeData.current then
+                        routeData.current = 1
+                    end
+                    return routeData.routes[routeData.current]
+                end
+            end
+            do
+                local function GetClosestPointOnCircle(pC, radius, p)
+                    local vX = p.x - pC.x;
+                    local vY = p.z - pC.z;
+                    local magV = math.sqrt(vX * vX + vY * vY);
+                    local aX = pC.x + vX / magV * radius;
+                    local aY = pC.z + vY / magV * radius;
+                    return { x = aX, z = aY }
+                end
+                local stageZoneName = Spearhead.Util.randomFromList(self.tables.stage_zonesByNumer[stageNumber]) or
+                "none"
+                local stagezone = Spearhead.DcsUtil.getZoneByName(stageZoneName)
+                if stagezone then
+                    local base = Spearhead.DcsUtil.getAirbaseById(baseId)
+                    if base then
+                        local closest = nil
+                        if stagezone.zone_type == Spearhead.DcsUtil.ZoneType.Cilinder then
+                            closest = GetClosestPointOnCircle({ x = stagezone.x, z = stagezone.z }, stagezone.radius,
+                                base:getPoint())
+                        else
+                            local function getDist(a, b)
+                                return math.sqrt((b.x - a.x) ^ 2 + (b.z - a.z) ^ 2)
+                            end
+
+                            local closestDistance = -1
+                            for _, vert in pairs(stagezone.verts) do
+                                local distance = getDist(vert, base:getPoint())
+                                if closestDistance == -1 or distance < closestDistance then
+                                    closestDistance = distance
+                                    closest = vert
+                                end
+                            end
+                        end
+
+                        if math.random(1, 2) % 2 == 0 then
+                            return { point1 = closest, point2 = { x = stagezone.x, z = stagezone.z } }
+                        else
+                            return { point1 = { x = stagezone.x, z = stagezone.z }, point2 = closest }
+                        end
+                    end
+                end
+            end
+        end
+        ---comment
+        ---@param self table
+        ---@param number number
+        ---@return string zoneName
+        o.getStageZonesByStageNumber = function(self, number)
+            local numberString = tostring(number)
+            return self.tables.stage_zonesByNumer[numberString]
+        end
+
+        ---comment
+        ---@param self table
+        ---@return table result a  list of stage zone names
+        o.getStagezoneNames = function(self)
+            return self.tables.stage_zones
+        end
+
+        o.getCarrierRouteZones = function(self)
+            return self.tables.carrier_route_zones
+        end
+
+        o.getMissionsForStage = function(self, stagename)
+            return self.tables.missionZonesPerStage[stagename] or {}
+        end
+
+        o.getRandomMissionsForStage = function(self, stagename)
+            return self.tables.randomMissionZonesPerStage[stagename] or {}
+        end
+
+        o.getGroupsForMissionZone = function(self, missionZoneName)
+            if Spearhead.Util.startswith(missionZoneName, "RANDOMMISSION") == true then
+                return self.tables.groupsInRandomMissions[missionZoneName] or {}
+            end
+            return self.tables.groupsInMissionZone[missionZoneName] or {}
+        end
+
+        o.getMissionBriefingForMissionZone = function(self, missionZoneName)
+            return self.tables.descriptions[missionZoneName] or ""
+        end
+
+        ---@param self table
+        ---@param stageName string
+        ---@return table result airbase IDs. Use Spearhead.DcsUtil.getAirbaseById
+        o.getAirbaseIdsInStage = function(self, stageName)
+            return self.tables.airbasesPerStage[stageName] or {}
+        end
+
+        o.getFarpZonesInStage = function(self, stageName)
+            return self.tables.farpZonesPerStage[stageName]
+        end
+
+        ---@param self table
+        ---@param airbaseId number
+        ---@return table
+        o.getCapGroupsAtAirbase = function(self, airbaseId)
+            return self.tables.capGroupsOnAirbase[airbaseId] or {}
+        end
+
+        ---@param self table
+        ---@param stageName string
+        ---@return table
+        o.getBlueSamsInStage = function(self, stageName)
+            return self.tables.blueSamZonesPerStage[stageName] or {}
+        end
+
+        ---@param self table
+        ---@param samZone string
+        ---@return table
+        o.getBlueSamGroupsInZone = function(self, samZone)
+            return self.tables.samUnitsPerSamZone[samZone] or {}
+        end
+
+        o.getRedGroupsAtAirbase = function(self, airbaseId)
+            local baseId = tostring(airbaseId)
+            return self.tables.redAirbaseGroupsPerAirbase[baseId] or {}
+        end
+
+        o.getBlueGroupsAtAirbase = function(self, airbaseId)
+            local baseId = tostring(airbaseId)
+            return self.tables.blueAirbaseGroupsPerAirbase[baseId] or {}
+        end
+
+        o.getMiscGroupsAtStage = function(self, stageName)
+            return self.tables.miscGroupsInStages[stageName] or {}
+        end
+
+        o.GetNewMissionCode = function(self)
+            local code = nil
+            local tries = 0
+            while code == nil and tries < 10 do
+                local random = math.random(1000, 9999)
+                if self.tables.missionCodes[random] == nil then
+                    code = random
+                end
+                tries = tries + 1
+            end
+            return code
+
+            --[[
+                TODO: What to do when there's no random possible
+            ]]
+        end
+
+        do -- LOG STATE
+            Logger:info("initiated the database with amount of zones: ")
+            Logger:info("Stages:            " .. Spearhead.Util.tableLength(o.tables.stage_zones))
+            Logger:info("Missions:          " .. Spearhead.Util.tableLength(o.tables.mission_zones))
+            Logger:info("Random Missions:   " .. Spearhead.Util.tableLength(o.tables.random_mission_zones))
+            Logger:info("Farps:             " .. Spearhead.Util.tableLength(o.tables.farp_zones))
+            Logger:info("Airbases:          " .. Spearhead.Util.tableLength(o.tables.airbasesPerStage))
+            Logger:info("RedAirbase Groups: " .. Spearhead.Util.tableLength(o.tables.redAirbaseGroupsPerAirbase["21"]))
+
+
+            for _, missionZone in pairs(o.tables.mission_zones) do
+                if o.tables.descriptions[missionZone] == nil then
+                    Spearhead.AddMissionEditorWarning("Mission with zonename: " ..
+                    missionZone .. " does not have a briefing")
+                end
+            end
+
+            for _, randomMission in pairs(o.tables.random_mission_zones) do
+                if o.tables.descriptions[randomMission] == nil then
+                    Spearhead.AddMissionEditorWarning("Mission with zonename: " ..
+                    randomMission .. " does not have a briefing")
+                end
+            end
+        end
+        singleton = o
+        return o
+    end
+end
+
+Spearhead.DB = SpearheadDB
+
+end --spearhead_db.lua
 do --spearhead_base.lua
 --- DEFAULT Values
 if Spearhead == nil then Spearhead = {} end
@@ -1795,1868 +2503,6 @@ Spearhead.LoadingDone = function()
 end
 
 end --spearhead_base.lua
-do --spearhead_db.lua
--- 3
-
-local SpearheadDB = {}
-do -- DB
-    local singleton = nil
-
-    ---comment
-    ---@param Logger table
-    ---@return table
-    function SpearheadDB:new(Logger, debug)
-        if not debug then debug = false end
-        if singleton ~= nil then
-            Logger:info("Returning an already initiated instance of SpearheadDB")
-            return singleton
-        end
-
-        local o = {}
-        setmetatable(o, { __index = self })
-
-        o.Logger = Logger
-        o.tables = {}
-        do --INIT ALL TABLES
-            Logger:debug("Initiating tables")
-
-            o.tables.all_zones = {}
-            o.tables.stage_zones = {}
-            o.tables.mission_zones = {}
-            o.tables.random_mission_zones = {}
-            o.tables.farp_zones = {}
-            o.tables.cap_route_zones = {}
-            o.tables.carrier_route_zones = {}
-
-            o.tables.stage_zonesByNumer = {}
-            o.tables.stage_numberPerzone = {}
-
-            do -- INIT ZONE TABLES
-                for zone_ind, zone_data in pairs(Spearhead.DcsUtil.__trigger_zones) do
-                    local zone_name = zone_data.name
-                    local split_string = Spearhead.Util.split_string(zone_name, "_")
-                    table.insert(o.tables.all_zones, zone_name)
-
-                    if string.lower(split_string[1]) == "missionstage" then
-                        table.insert(o.tables.stage_zones, zone_name)
-                        if split_string[2] then
-                            local stringified = tostring(split_string[2]) or "unknown"
-                            if o.tables.stage_zonesByNumer[stringified] == nil then
-                                o.tables.stage_zonesByNumer[stringified] = {}
-                            end
-                            table.insert(o.tables.stage_zonesByNumer[stringified], zone_name)
-                            o.tables.stage_numberPerzone[zone_name] = stringified
-                        end
-                    end
-
-                    if string.lower(split_string[1]) == "mission" then
-                        table.insert(o.tables.mission_zones, zone_name)
-                    end
-
-                    if string.lower(split_string[1]) == "randommission" then
-                        table.insert(o.tables.random_mission_zones, zone_name)
-                    end
-
-                    if string.lower(split_string[1]) == "farp" then
-                        table.insert(o.tables.farp_zones, zone_name)
-                    end
-
-                    if string.lower(split_string[1]) == "caproute" then
-                        table.insert(o.tables.cap_route_zones, zone_name)
-                    end
-
-                    if string.lower(split_string[1]) == "carrierroute" then
-                        table.insert(o.tables.carrier_route_zones, zone_name)
-                    end
-                end
-            end
-
-            Logger:debug("initiated zone tables, continuing with descriptions")
-            o.tables.descriptions = {}
-            do --load markers
-                if env.mission.drawings and env.mission.drawings.layers then
-                    for i, layer in pairs(env.mission.drawings.layers) do
-                        if string.lower(layer.name) == "author" then
-                            for key, layer_object in pairs(layer.objects) do
-                                local inZone = Spearhead.DcsUtil.isPositionInZones(layer_object.mapX, layer_object.mapY,
-                                    o.tables.mission_zones)
-                                if Spearhead.Util.tableLength(inZone) >= 1 then
-                                    local name = inZone[1]
-                                    if name ~= nil then
-                                        o.tables.descriptions[name] = layer_object.text
-                                    end
-                                end
-
-                                local inZone = Spearhead.DcsUtil.isPositionInZones(layer_object.mapX, layer_object.mapY,
-                                    o.tables.random_mission_zones)
-                                if Spearhead.Util.tableLength(inZone) >= 1 then
-                                    local name = inZone[1]
-                                    if name ~= nil then
-                                        o.tables.descriptions[name] = layer_object.text
-                                    end
-                                end
-                            end
-                        end
-                    end
-                end
-            end
-
-            o.tables.missionZonesPerStage = {}
-            for key, missionZone in pairs(o.tables.mission_zones) do
-                local found = false
-                local i = 1
-                while found == false and i <= Spearhead.Util.tableLength(o.tables.stage_zones) do
-                    local stageZone = o.tables.stage_zones[i]
-                    if Spearhead.DcsUtil.isZoneInZone(missionZone, stageZone) == true then
-                        if o.tables.missionZonesPerStage[stageZone] == nil then
-                            o.tables.missionZonesPerStage[stageZone] = {}
-                        end
-                        table.insert(o.tables.missionZonesPerStage[stageZone], missionZone)
-                    end
-                    i = i + 1
-                end
-            end
-
-            o.tables.randomMissionZonesPerStage = {}
-            for key, missionZone in pairs(o.tables.random_mission_zones) do
-                local found = false
-                local i = 1
-                while found == false and i <= Spearhead.Util.tableLength(o.tables.stage_zones) do
-                    local stageZone = o.tables.stage_zones[i]
-                    if Spearhead.DcsUtil.isZoneInZone(missionZone, stageZone) == true then
-                        if o.tables.randomMissionZonesPerStage[stageZone] == nil then
-                            o.tables.randomMissionZonesPerStage[stageZone] = {}
-                        end
-                        table.insert(o.tables.randomMissionZonesPerStage[stageZone], missionZone)
-                    end
-                    i = i + 1
-                end
-            end
-
-            local isAirbaseInZone = {}
-            o.tables.airbasesPerStage = {}
-            o.tables.farpIdsInFarpZones = {}
-            local airbases = world.getAirbases()
-            for _, airbase in pairs(airbases) do
-                local baseId = airbase:getID()
-                local point = airbase:getPoint()
-                local found = false
-                for _, zoneName in pairs(o.tables.stage_zones) do
-                    if found == false then
-                        if Spearhead.DcsUtil.isPositionInZone(point.x, point.z, zoneName) == true then
-                            found = true
-                            local baseIdString = tostring(baseId) or "nil"
-                            isAirbaseInZone[baseIdString] = true
-
-                            if airbase:getDesc().category == 0 then
-                                --Airbase
-                                if Spearhead.DcsUtil.getStartingCoalition(baseId) == 2 then
-                                    airbase:setCoalition(1)
-                                    airbase:autoCapture(false)
-                                end
-
-                                if o.tables.airbasesPerStage[zoneName] == nil then
-                                    o.tables.airbasesPerStage[zoneName] = {}
-                                end
-
-                                table.insert(o.tables.airbasesPerStage[zoneName], baseId)
-                            else
-                                -- farp
-                                local i = 1
-                                local farpFound = false
-                                while farpFound == false and i <= Spearhead.Util.tableLength(o.tables.farp_zones) do
-                                    local farpZoneName = o.tables.farp_zones[i]
-                                    if Spearhead.DcsUtil.isPositionInZone(point.x, point.z, farpZoneName) == true then
-                                        farpFound = true
-
-                                        if o.tables.farpIdsInFarpZones[farpZoneName] == nil then
-                                            o.tables.farpIdsInFarpZones[farpZoneName] = {}
-                                        end
-
-                                        airbase:setCoalition(1)
-                                        airbase:autoCapture(false)
-                                        table.insert(o.tables.farpIdsInFarpZones[farpZoneName], baseIdString)
-                                    end
-                                    i = i + 1
-                                end
-                            end
-                        end
-                    end
-                end
-            end
-
-
-
-            o.tables.farpZonesPerStage = {}
-            for _, farpZoneName in pairs(o.tables.farp_zones) do
-                local findFirst = function(farpZoneName)
-                    for _, stage_zone in pairs(o.tables.stage_zones) do
-                        if Spearhead.DcsUtil.isZoneInZone(farpZoneName, stage_zone) then
-                            return stage_zone
-                        end
-                    end
-                    return nil
-                end
-
-                local found = findFirst(farpZoneName)
-                if found then
-                    if o.tables.farpZonesPerStage[found] == nil then
-                        o.tables.farpZonesPerStage[found] = {}
-                    end
-
-                    table.insert(o.tables.farpZonesPerStage[found], farpZoneName)
-                end
-            end
-
-
-            local is_group_taken = {}
-            do
-                local all_groups = Spearhead.DcsUtil.getAllGroupNames()
-                for _, value in pairs(all_groups) do
-                    is_group_taken[value] = false
-                end
-            end
-
-            local getAvailableGroups = function()
-                local result = {}
-                for name, value in pairs(is_group_taken) do
-                    if value == false then
-                        table.insert(result, name)
-                    end
-                end
-                return result
-            end
-
-            local getAvailableCAPGroups = function()
-                local result = {}
-                for name, value in pairs(is_group_taken) do
-                    if value == false and Spearhead.Util.startswith(name, "CAP") then
-                        table.insert(result, name)
-                    end
-                end
-                return result
-            end
-
-            --- airbaseId <> groupname[]
-            o.tables.capGroupsOnAirbase = {}
-            local loadCapUnits = function()
-                local all_groups = getAvailableCAPGroups()
-                local airbases = world.getAirbases()
-                for _, airbase in pairs(airbases) do
-                    local baseId = airbase:getID()
-                    local point = airbase:getPoint()
-                    local zone = Spearhead.DcsUtil.getAirbaseZoneById(baseId) or
-                    { x = point.x, z = point.z, radius = 4000 }
-                    o.tables.capGroupsOnAirbase[baseId] = {}
-                    local groups = Spearhead.DcsUtil.areGroupsInCustomZone(all_groups, zone)
-                    for _, groupName in pairs(groups) do
-                        is_group_taken[groupName] = true
-                        table.insert(o.tables.capGroupsOnAirbase[baseId], groupName)
-                    end
-                end
-            end
-
-            --- missionZoneName <> groupname[]
-            o.tables.groupsInMissionZone = {}
-            local loadMissionzoneUnits = function()
-                local all_groups = getAvailableGroups()
-                for _, missionZoneName in pairs(o.tables.mission_zones) do
-                    o.tables.groupsInMissionZone[missionZoneName] = {}
-                    local groups = Spearhead.DcsUtil.getGroupsInZone(all_groups, missionZoneName)
-                    for _, groupName in pairs(groups) do
-                        is_group_taken[groupName] = true
-                        table.insert(o.tables.groupsInMissionZone[missionZoneName], groupName)
-                    end
-                end
-            end
-
-            --- missionZoneName <> groupname[]
-            o.tables.groupsInRandomMissions = {}
-            local loadRandomMissionzoneUnits = function()
-                local all_groups = getAvailableGroups()
-                for _, missionZoneName in pairs(o.tables.random_mission_zones) do
-                    o.tables.groupsInRandomMissions[missionZoneName] = {}
-                    local groups = Spearhead.DcsUtil.getGroupsInZone(all_groups, missionZoneName)
-                    for _, groupName in pairs(groups) do
-                        is_group_taken[groupName] = true
-                        table.insert(o.tables.groupsInRandomMissions[missionZoneName], groupName)
-                    end
-                end
-            end
-
-            --- farpZoneName <> groupname[]
-            o.tables.groupsInFarpZone = {}
-            local loadFarpGroups = function()
-                local all_groups = getAvailableGroups()
-                for _, farpZone in pairs(o.tables.farp_zones) do
-                    o.tables.groupsInFarpZone[farpZone] = {}
-                    local groups = Spearhead.DcsUtil.getGroupsInZone(all_groups, farpZone)
-                    for _, groupName in pairs(groups) do
-                        is_group_taken[groupName] = true
-                        table.insert(o.tables.groupsInFarpZone[farpZone], groupName)
-                    end
-                end
-            end
-
-            --- farpZoneName <> groupname[]
-            o.tables.redAirbaseGroupsPerAirbase = {}
-            o.tables.blueAirbaseGroupsPerAirbase = {}
-            local loadAirbaseGroups = function()
-                local all_groups = getAvailableGroups()
-                local airbases = world.getAirbases()
-                for _, airbase in pairs(airbases) do
-                    local baseId = tostring(airbase:getID())
-                    local point = airbase:getPoint()
-                    local airbaseZone = Spearhead.DcsUtil.getAirbaseZoneById(baseId) or
-                    { x = point.x, z = point.z, radius = 4000 }
-
-                    if isAirbaseInZone[tostring(baseId) or "something"] == true and airbaseZone and airbase:getDesc().category == Airbase.Category.AIRDROME then
-                        if debug then
-                            if airbaseZone.zone_type == Spearhead.DcsUtil.ZoneType.Polygon then
-                                local functionString = "trigger.action.markupToAll(7, -1, " .. baseId + 300 .. ","
-                                for _, vecpoint in pairs(airbaseZone.verts) do
-                                    functionString = functionString .. " { x=" .. vecpoint.x .. ", y=0,z=" .. vecpoint.z ..
-                                    "},"
-                                end
-                                functionString = functionString .. "{0,1,0,1}, {0,0,0,1}, 1)"
-
-                                env.info(functionString)
----@diagnostic disable-next-line: deprecated
-                                local f, err = loadstring(functionString)
-                                if f then
-                                    f()
-                                else
-                                    env.info(err)
-                                end
-                            else
-                                trigger.action.circleToAll(-1, baseId, { x = point.x, y = 0, z = point.z }, 2048,
-                                    { 1, 0, 0, 1 }, { 0, 0, 0, 0 }, 1, true)
-                            end
-                        end
-
-
-                        o.tables.redAirbaseGroupsPerAirbase[baseId] = {}
-                        o.tables.blueAirbaseGroupsPerAirbase[baseId] = {}
-                        local groups = Spearhead.DcsUtil.areGroupsInCustomZone(all_groups, airbaseZone)
-                        for _, groupName in pairs(groups) do
-                            if Spearhead.DcsUtil.IsGroupStatic(groupName) == true then
-                                local object = StaticObject.getByName(groupName)
-                                if object then
-                                    if object:getCoalition() == coalition.side.RED then
-                                        table.insert(o.tables.redAirbaseGroupsPerAirbase[baseId], groupName)
-                                        is_group_taken[groupName] = true
-                                    elseif object:getCoalition() == coalition.side.BLUE then
-                                        table.insert(o.tables.blueAirbaseGroupsPerAirbase[baseId], groupName)
-                                        is_group_taken[groupName] = true
-                                    end
-                                end
-                            else
-                                local group = Group.getByName(groupName)
-                                if group then
-                                    if group:getCoalition() == coalition.side.RED then
-                                        table.insert(o.tables.redAirbaseGroupsPerAirbase[baseId], groupName)
-                                        is_group_taken[groupName] = true
-                                    elseif group:getCoalition() == coalition.side.BLUE then
-                                        table.insert(o.tables.blueAirbaseGroupsPerAirbase[baseId], groupName)
-                                        is_group_taken[groupName] = true
-                                    end
-                                end
-                            end
-                        end
-                    end
-                end
-            end
-
-            o.tables.miscGroupsInStages = {}
-            local loadMiscGroupsInStages = function()
-                local all_groups = getAvailableGroups()
-                for _, stage_zone in pairs(o.tables.stage_zones) do
-                    o.tables.miscGroupsInStages[stage_zone] = {}
-                    local groups = Spearhead.DcsUtil.getGroupsInZone(all_groups, stage_zone)
-                    for _, groupName in pairs(groups) do
-                        if Spearhead.DcsUtil.IsGroupStatic(groupName) == true then
-                            local object = StaticObject.getByName(groupName)
-                            if object and object:getCoalition() ~= coalition.side.NEUTRAL then
-                                is_group_taken[groupName] = true
-                                table.insert(o.tables.miscGroupsInStages[stage_zone], groupName)
-                            end
-                        else
-                            local group = Group.getByName(groupName)
-                            if group and group:getCoalition() ~= coalition.side.NEUTRAL then
-                                is_group_taken[groupName] = true
-                                table.insert(o.tables.miscGroupsInStages[stage_zone], groupName)
-                            end
-                        end
-                    end
-                end
-            end
-
-            loadCapUnits()
-            loadMissionzoneUnits()
-            loadRandomMissionzoneUnits()
-            loadFarpGroups()
-            loadAirbaseGroups()
-            loadMiscGroupsInStages()
-
-            -- local cleanup = function () --CLean up all groups that are now managed inside zones by spearhead
-
-            --     local count = 0
-            --     for name, taken in pairs(is_group_taken) do
-            --         if taken == true then
-            --             Spearhead.DcsUtil.DestroyGroup(name)
-            --             count = count + 1
-            --         end
-            --     end
-            --     Logger:info("Destroyed " .. count .. " units that are now managed in zones by Spearhead")
-            -- end
-            -- cleanup()
-
-            --- key: zoneName value: { current, routes = [ { point1, point2 } ] }
-            o.tables.capRoutesPerStageNumber = {}
-            for _, zoneName in pairs(o.tables.stage_zones) do
-                local number = tostring(o.tables.stage_numberPerzone[zoneName] or "unknown")
-
-                if o.tables.capRoutesPerStageNumber[number] == nil then
-                    o.tables.capRoutesPerStageNumber[number] = {
-                        current = 0,
-                        routes = {}
-                    }
-                end
-
-                for _, cap_route_zone in pairs(o.tables.cap_route_zones) do
-                    if Spearhead.DcsUtil.isZoneInZone(cap_route_zone, zoneName) == true then
-                        local zone = Spearhead.DcsUtil.getZoneByName(cap_route_zone)
-                        if zone then
-                            if zone.zone_type == Spearhead.DcsUtil.ZoneType.Cilinder then
-                                table.insert(o.tables.capRoutesPerStageNumber[number].routes,
-                                    { point1 = { x = zone.x, z = zone.z }, point2 = nil })
-                            else
-                                local function getDist(a, b)
-                                    return math.sqrt((b.x - a.x) ^ 2 + (b.z - a.z) ^ 2)
-                                end
-
-                                local biggest = nil
-                                local biggestA = nil
-                                local biggestB = nil
-
-                                for i = 1, 3 do
-                                    for ii = i + 1, 4 do
-                                        local a = zone.verts[i]
-                                        local b = zone.verts[ii]
-                                        local dist = getDist(a, b)
-
-                                        if biggest == nil or dist > biggest then
-                                            biggestA = a
-                                            biggestB = b
-                                            biggest = dist
-                                        end
-                                    end
-                                end
-
-                                if biggestA and biggestB then
-                                    table.insert(o.tables.capRoutesPerStageNumber[number].routes,
-                                        {
-                                            point1 = { x = biggestA.x, z = biggestA.z },
-                                            point2 = { x = biggestB.x, z = biggestB.z }
-                                        })
-                                end
-                            end
-                        end
-                    end
-                end
-            end
-
-            o.Logger:debug(o.tables.capRoutesPerStageNumber)
-
-            o.tables.missionCodes = {}
-        end
-
-        o.GetDescriptionForMission = function(self, missionZoneName)
-            return self.tables.descriptions[missionZoneName]
-        end
-
-        o.getCapRouteInZone = function(self, stageNumber, baseId)
-            local stageNumber = tostring(stageNumber) or "nothing"
-            local routeData = self.tables.capRoutesPerStageNumber[stageNumber]
-            if routeData then
-                local count = Spearhead.Util.tableLength(routeData.routes)
-                if count > 0 then
-                    routeData.current = routeData.current + 1
-                    if count < routeData.current then
-                        routeData.current = 1
-                    end
-                    return routeData.routes[routeData.current]
-                end
-            end
-            do
-                local function GetClosestPointOnCircle(pC, radius, p)
-                    local vX = p.x - pC.x;
-                    local vY = p.z - pC.z;
-                    local magV = math.sqrt(vX * vX + vY * vY);
-                    local aX = pC.x + vX / magV * radius;
-                    local aY = pC.z + vY / magV * radius;
-                    return { x = aX, z = aY }
-                end
-                local stageZoneName = Spearhead.Util.randomFromList(self.tables.stage_zonesByNumer[stageNumber]) or
-                "none"
-                local stagezone = Spearhead.DcsUtil.getZoneByName(stageZoneName)
-                if stagezone then
-                    local base = Spearhead.DcsUtil.getAirbaseById(baseId)
-                    if base then
-                        local closest = nil
-                        if stagezone.zone_type == Spearhead.DcsUtil.ZoneType.Cilinder then
-                            closest = GetClosestPointOnCircle({ x = stagezone.x, z = stagezone.z }, stagezone.radius,
-                                base:getPoint())
-                        else
-                            local function getDist(a, b)
-                                return math.sqrt((b.x - a.x) ^ 2 + (b.z - a.z) ^ 2)
-                            end
-
-                            local closestDistance = -1
-                            for _, vert in pairs(stagezone.verts) do
-                                local distance = getDist(vert, base:getPoint())
-                                if closestDistance == -1 or distance < closestDistance then
-                                    closestDistance = distance
-                                    closest = vert
-                                end
-                            end
-                        end
-
-                        if math.random(1, 2) % 2 == 0 then
-                            return { point1 = closest, point2 = { x = stagezone.x, z = stagezone.z } }
-                        else
-                            return { point1 = { x = stagezone.x, z = stagezone.z }, point2 = closest }
-                        end
-                    end
-                end
-            end
-        end
-        ---comment
-        ---@param self table
-        ---@param number number
-        ---@return string zoneName
-        o.getStageZonesByStageNumber = function(self, number)
-            local numberString = tostring(number)
-            return self.tables.stage_zonesByNumer[numberString]
-        end
-
-        ---comment
-        ---@param self table
-        ---@return table result a  list of stage zone names
-        o.getStagezoneNames = function(self)
-            return self.tables.stage_zones
-        end
-
-        o.getCarrierRouteZones = function(self)
-            return self.tables.carrier_route_zones
-        end
-
-        o.getMissionsForStage = function(self, stagename)
-            return self.tables.missionZonesPerStage[stagename] or {}
-        end
-
-        o.getRandomMissionsForStage = function(self, stagename)
-            return self.tables.randomMissionZonesPerStage[stagename] or {}
-        end
-
-        o.getGroupsForMissionZone = function(self, missionZoneName)
-            if Spearhead.Util.startswith(missionZoneName, "RANDOMMISSION") == true then
-                return self.tables.groupsInRandomMissions[missionZoneName] or {}
-            end
-            return self.tables.groupsInMissionZone[missionZoneName] or {}
-        end
-
-        o.getMissionBriefingForMissionZone = function(self, missionZoneName)
-            return self.tables.descriptions[missionZoneName] or ""
-        end
-
-        ---comment
-        ---@param self table
-        ---@param stageName string
-        ---@return table result airbase IDs. Use Spearhead.DcsUtil.getAirbaseById
-        o.getAirbaseIdsInStage = function(self, stageName)
-            return self.tables.airbasesPerStage[stageName] or {}
-        end
-
-        o.getFarpZonesInStage = function(self, stageName)
-            return self.tables.farpZonesPerStage[stageName]
-        end
-
-        ---comment
-        ---@param self table
-        ---@param airbaseId number
-        ---@return table
-        o.getCapGroupsAtAirbase = function(self, airbaseId)
-            return self.tables.capGroupsOnAirbase[airbaseId] or {}
-        end
-
-        o.getRedGroupsAtAirbase = function(self, airbaseId)
-            local baseId = tostring(airbaseId)
-            return self.tables.redAirbaseGroupsPerAirbase[baseId] or {}
-        end
-
-        o.getBlueGroupsAtAirbase = function(self, airbaseId)
-            local baseId = tostring(airbaseId)
-            return self.tables.blueAirbaseGroupsPerAirbase[baseId] or {}
-        end
-
-        o.getMiscGroupsAtStage = function(self, stageName)
-            return self.tables.miscGroupsInStages[stageName] or {}
-        end
-
-        o.GetNewMissionCode = function(self)
-            local code = nil
-            local tries = 0
-            while code == nil and tries < 10 do
-                local random = math.random(1000, 9999)
-                if self.tables.missionCodes[random] == nil then
-                    code = random
-                end
-                tries = tries + 1
-            end
-            return code
-
-            --[[
-                TODO: What to do when there's no random possible
-            ]]
-        end
-
-        do -- LOG STATE
-            Logger:info("initiated the database with amount of zones: ")
-            Logger:info("Stages:            " .. Spearhead.Util.tableLength(o.tables.stage_zones))
-            Logger:info("Missions:          " .. Spearhead.Util.tableLength(o.tables.mission_zones))
-            Logger:info("Random Missions:   " .. Spearhead.Util.tableLength(o.tables.random_mission_zones))
-            Logger:info("Farps:             " .. Spearhead.Util.tableLength(o.tables.farp_zones))
-            Logger:info("Airbases:          " .. Spearhead.Util.tableLength(o.tables.airbasesPerStage))
-            Logger:info("RedAirbase Groups: " .. Spearhead.Util.tableLength(o.tables.redAirbaseGroupsPerAirbase["21"]))
-
-
-            for _, missionZone in pairs(o.tables.mission_zones) do
-                if o.tables.descriptions[missionZone] == nil then
-                    Spearhead.AddMissionEditorWarning("Mission with zonename: " ..
-                    missionZone .. " does not have a briefing")
-                end
-            end
-
-            for _, randomMission in pairs(o.tables.random_mission_zones) do
-                if o.tables.descriptions[randomMission] == nil then
-                    Spearhead.AddMissionEditorWarning("Mission with zonename: " ..
-                    randomMission .. " does not have a briefing")
-                end
-            end
-        end
-        singleton = o
-        return o
-    end
-end
-
-Spearhead.DB = SpearheadDB
-
-end --spearhead_db.lua
-do --GlobalFleetManager.lua
-
-
-local GlobalFleetManager = {}
-
-local fleetGroups = {}
-
-GlobalFleetManager.start = function(database)
-
-    local logger = Spearhead.LoggerTemplate:new("CARRIERFLEET", Spearhead.LoggerTemplate.LogLevelOptions.INFO)
-
-    local all_groups = Spearhead.DcsUtil.getAllGroupNames()
-    for _, groupName in pairs(all_groups) do
-        if Spearhead.Util.startswith(string.lower(groupName), "carriergroup" ) == true then
-            logger:info("Registering " .. groupName .. " as a managed fleet")
-            local carrierGroup = Spearhead.internal.FleetGroup:new(groupName, database, logger)
-            table.insert(fleetGroups, carrierGroup)
-        end
-    end
-end
-
-if not Spearhead.internal then Spearhead.internal = {} end
-Spearhead.internal.GlobalFleetManager = GlobalFleetManager
-end --GlobalFleetManager.lua
-do --FleetGroup.lua
-local FleetGroup = {}
-
-function FleetGroup:new(fleetGroupName, database, logger)
-    local o = {}
-
-    setmetatable(o, { __index = self })
-
-    o.fleetGroupName = fleetGroupName
-    o.logger = logger
-
-    local split_name = Spearhead.Util.split_string(fleetGroupName, "_")
-    if Spearhead.Util.tableLength(split_name) < 2 then
-        Spearhead.AddMissionEditorWarning("CARRIERGROUP should have at least 2 parts. CARRIERGROUP_<fleetname>")
-        return nil
-    end
-    o.fleetNameIdentifier = split_name[2]
-
-    o.targetZonePerStage = {}
-    o.currentTargetZone = nil
-    o.pointsPerZone = {}
-
-    do --INIT
-        local carrierRouteZones = database:getCarrierRouteZones()
-        for _, zoneName in pairs(carrierRouteZones) do
-            if Spearhead.Util.strContains(string.lower(zoneName), "_".. string.lower(o.fleetNameIdentifier) .. "_" ) == true then
-                local zone = Spearhead.DcsUtil.getZoneByName(zoneName)
-                if zone and zone.zone_type == Spearhead.DcsUtil.ZoneType.Polygon then
-                    local split_string = Spearhead.Util.split_string(zoneName, "_")
-                    if Spearhead.Util.tableLength(split_string) < 3 then
-                        Spearhead.AddMissionEditorWarning(
-                            "CARRIERROUTE should at least have 3 parts. Check the documentation for: " .. zoneName)
-                    else
-                        local function GetTwoFurthestPoints(zone)
-                            local function getDist(a, b)
-                                return math.sqrt((b.x - a.x) ^ 2 + (b.z - a.z) ^ 2)
-                            end
-
-                            local biggest = nil
-                            local biggestA = nil
-                            local biggestB = nil
-
-                            for i = 1, 3 do
-                                for ii = i + 1, 4 do
-                                    local a = zone.verts[i]
-                                    local b = zone.verts[ii]
-                                    local dist = getDist(a, b)
-
-                                    if biggest == nil or dist > biggest then
-                                        biggestA = a
-                                        biggestB = b
-                                        biggest = dist
-                                    end
-                                end
-                            end
-                            return { x = biggestA.x, z = biggestA.z }, { x = biggestB.x, z = biggestB.z }
-                        end
-
-                        local function getMinMaxStage(namePart)
-                            if namePart == nil then
-                                return nil, nil
-                            end
-
-                            if Spearhead.Util.startswith(namePart, "%[") == true then
-                                namePart = Spearhead.Util.split_string(namePart, "[")[1]
-                            end
-
-                            if Spearhead.Util.strContains(namePart, "%]") == true then
-                                namePart = Spearhead.Util.split_string(namePart, "]")[1]
-                            end
-
-                            local split_numbers = Spearhead.Util.split_string(namePart, "-")
-                            if Spearhead.Util.tableLength(split_numbers) < 2  then
-                                Spearhead.AddMissionEditorWarning("CARRIERROUTE zone stage numbers not in the format _[<number>-<number>]: " .. zoneName)
-                                return nil, nil
-                            end
-
-                            local first = tonumber(split_numbers[1])
-                            local second = tonumber(split_numbers[2])
-
-                            if first == nil or second == nil  then
-                                Spearhead.AddMissionEditorWarning("CARRIERROUTE zone stage numbers not in the format _[<number>-<number>]: " .. zoneName)
-                                return nil, nil
-                            end
-                            return first, second
-                        end
-
-                        local pointA, pointB = GetTwoFurthestPoints(zone)
-                        local first, second = getMinMaxStage(split_string[3])
-                        if first ~= nil and second ~= nil then
-                            for i = first, second do
-                                o.targetZonePerStage[tostring(i)] = zoneName
-                            end
-                            o.pointsPerZone[zoneName] = { pointA = pointA, pointB = pointB }
-                        else
-                            Spearhead.AddMissionEditorWarning("CARRIERROUTE zone stage numbers not in the format _[<number>-<number>]: " .. zoneName)
-                        end
-                    end
-                else
-                    Spearhead.AddMissionEditorWarning("CARRIERROUTE cannot be a cilinder: " .. zoneName)
-                end
-            end
-        end
-    end
-
-    local SetTaskAsync = function(input, time)
-        local targetZone = input.targetZone
-        local task = input.task
-        local groupName = input.groupName
-        local logger = input.logger
-
-        local group = Group.getByName(groupName)
-        if group then
-            logger:info("Sending " .. fleetGroupName .. " to " .. targetZone)
-            group:getController():setTask(task)
-        end
-    end
-
-    o.OnStageNumberChanged = function(self, number)
-        local targetZone = self.targetZonePerStage[tostring(number)]
-        if targetZone and targetZone ~= self.currentTargetZone then
-            local points = self.pointsPerZone[targetZone]
-            local task  = Spearhead.RouteUtil.CreateCarrierRacetrack(points.pointA, points.pointB)
-            timer.scheduleFunction(SetTaskAsync, { task = task, targetZone = targetZone,  groupName = self.fleetGroupName, logger = self.logger }, timer.getTime() + 5)
-        end
-    end
-
-    Spearhead.Events.AddStageNumberChangedListener(o)
-    return o
-end
-
-if not Spearhead.internal then Spearhead.internal = {} end
-Spearhead.internal.FleetGroup = FleetGroup
-
-end --FleetGroup.lua
-do --Stage.lua
-
-local Stage = {}
-do --init STAGE DIRECTOR
-
-
-    local stageDrawingId = 0
-
-    ---comment
-    ---@param stagezone_name string
-    ---@param database table
-    ---@param logger table
-    ---@return table?
-    function Stage:new(stagezone_name, database, logger, stageConfig)
-        local o = {}
-        setmetatable(o, { __index = self })
-
-        o.zoneName = stagezone_name
-
-        local split = Spearhead.Util.split_string(stagezone_name, "_")
-        if Spearhead.Util.tableLength(split) < 2 then
-            Spearhead.AddMissionEditorWarning("Stage zone with name " .. stagezone_name .. " does not have a order number or valid format")
-            return nil
-        end
-
-        local orderNumber = tonumber(split[2])
-        if orderNumber == nil then
-            Spearhead.AddMissionEditorWarning("Stage zone with name " .. stagezone_name .. " does not have a valid order number : " .. split[2])
-            return nil
-        end
-
-        o.stageNumber = orderNumber
-        o.isActive = false
-        o.database = database
-        o.logger = logger
-        o.db = {}
-        o.db.missionsByCode = {}
-        o.db.missions = {}
-        o.db.sams = {}
-        o.db.redAirbasegroups = {}
-        o.db.blueAirbasegroups = {}
-        o.db.airbaseIds = {}
-        o.db.farps = {}
-        o.activeStage = -99
-        o.preActivated = false
-        o.stageConfig = stageConfig or {}
-        o.stageDrawingId = stageDrawingId + 1
-
-        stageDrawingId = stageDrawingId + 1
-
-        do --Init Stage
-            logger:info("Initiating new Stage with name: " .. stagezone_name)
-
-            local missionZones = database:getMissionsForStage(stagezone_name)
-            for _, missionZone in pairs(missionZones) do
-                local mission = Spearhead.internal.Mission:new(missionZone, database, logger)
-                if mission then
-                    o.db.missionsByCode[mission.code] = mission
-                    if mission.missionType == Spearhead.internal.Mission.MissionType.SAM then
-                        table.insert(o.db.sams, mission)
-                    else
-                        table.insert(o.db.missions, mission)
-                    end
-                end
-            end
-
-            local randomMissionNames = database:getRandomMissionsForStage(stagezone_name)
-
-            local randomMissionByName = {}
-            for _, missionZoneName in pairs(randomMissionNames) do
-                local mission = Spearhead.internal.Mission:new(missionZoneName, database, logger)
-                if mission then
-                    if randomMissionByName[mission.name] == nil then
-                        randomMissionByName[mission.name] = {}
-                    end
-                    table.insert(randomMissionByName[mission.name], mission)
-                end
-            end
-
-            for _, missions in pairs(randomMissionByName) do
-                local mission = Spearhead.Util.randomFromList(missions)
-                if mission then
-                    o.db.missionsByCode[mission.code] = mission
-                    if mission.missionType == Spearhead.internal.Mission.MissionType.SAM then
-                        table.insert(o.db.sams, mission)
-                    else
-                        table.insert(o.db.missions, mission)
-                    end
-                end
-            end
-
-            local airbaseIds = database:getAirbaseIdsInStage(o.zoneName)
-            if airbaseIds ~= nil and type(airbaseIds) == "table" then
-                o.db.airbaseIds = airbaseIds
-                for _, airbaseId in pairs(airbaseIds) do
-                    
-                    for _, groupName in pairs(database:getRedGroupsAtAirbase(airbaseId)) do 
-                        table.insert(o.db.redAirbasegroups, groupName)
-                        Spearhead.DcsUtil.DestroyGroup(groupName)
-                    end
-
-                    for _, groupName in pairs(database:getBlueGroupsAtAirbase(airbaseId)) do 
-                        table.insert(o.db.blueAirbasegroups, groupName)
-                        Spearhead.DcsUtil.DestroyGroup(groupName)
-                    end
-                end
-            end
-
-            local miscGroups = database:getMiscGroupsAtStage(o.zoneName)
-            for _, groupName in pairs(miscGroups) do
-                Spearhead.DcsUtil.DestroyGroup(groupName)
-            end
-
-            local farps = database:getFarpZonesInStage(o.zoneName)
-            if farps ~= nil and type(farps) == "table" then o.db.farps = farps end
-        end
-
-        o.StageCompleteListeners = {}
-        ---comment
-        ---@param self table
-        ---@param StageCompleteListener table an Object with function onStageCompleted(stage)
-        o.AddStageCompleteListener = function(self, StageCompleteListener)
-
-            if type(StageCompleteListener) ~= "table" then
-                return
-            end
-            table.insert(self.StageCompleteListeners, StageCompleteListener)
-        end
-
-        local triggerStageCompleteListeners = function(self)
-            self.isActive = false
-            for _, callable in pairs(self.StageCompleteListeners) do
-                local succ, err = pcall( function() 
-                    callable:onStageCompleted(self)
-                end)
-                if err then
-                    self.logger:warn("Error in misstion complete listener:" .. err)
-                end
-            end
-        end
-
-        o.IsComplete = function(self)
-            for i, mission in pairs(self.db.missions) do
-                local state = mission:GetState()
-                if state == Spearhead.internal.Mission.MissionState.ACTIVE or state == Spearhead.internal.Mission.MissionState.NEW then
-                    return false
-                end
-            end
-            return true
-        end
-
-        local CheckContinuousAsync = function(self, time)
-            self.logger:info("Checking stage completion for stage: " .. self.zoneName)
-            if self.activeStage == self.stageNumber then
-                return nil -- stop looping if this stage is not even active
-            end
-
-            if self:IsComplete() == true then
-                triggerStageCompleteListeners(self)
-                return nil
-            end
-            return time + 60
-        end
-
-        ---Activates all SAMS, Airbase units etc all at once.
-        ---@param self table
-        o.PreActivate = function(self)
-            if self.preActivated == false then
-                self.preActivated = true
-                for key, mission in pairs(self.db.sams) do
-                    if mission and mission.Activate then
-                        mission:Activate()
-                    end
-                end
-                self.logger:debug("Pre-activating stage with airbase groups amount: " .. Spearhead.Util.tableLength(self.db.redAirbasegroups))
-
-                for _ , groupName in pairs(self.db.redAirbasegroups) do
-                    Spearhead.DcsUtil.SpawnGroupTemplate(groupName)
-                end
-            end
-
-            if self.activeStage == self.stageNumber then
-                for _, mission in pairs(self.db.sams) do
-                    self:AddCommmandsForMissionToAllPlayers(mission)
-                end
-            end
-        end
-
-        local activateMissionsIfApplicableAsync = function(self)
-            self:ActivateMissionsIfApplicable(self)
-        end
-
-        o.MarkStage = function(self, blue)
-            local fillColor = {1, 0, 0, 0.1}
-            local line ={ 1, 0,0, 1 }
-            if blue == true then
-                fillColor = {0, 0, 1, 0.1}
-                line ={ 0, 0,1, 1 }
-            end
-
-            local zone = Spearhead.DcsUtil.getZoneByName(self.zoneName)
-            if zone and self.stageConfig:isDrawStagesEnabled() == true then
-                self.logger:debug("drawing stage")
-                if zone.zone_type == Spearhead.DcsUtil.ZoneType.Cilinder then
-                    trigger.action.circleToAll(-1, self.stageDrawingId, {x = zone.x, y = 0 , z = zone.z}, zone.radius, {0,0,0,0}, {0,0,0,0},4, true)
-                else
-                    --trigger.action.circleToAll(-1, self.stageDrawingId, {x = zone.x, y = 0 , z = zone.z}, zone.radius, { 1, 0,0, 1 }, {1,0,0,1},4, true)
-                    trigger.action.quadToAll( -1, self.stageDrawingId,  zone.verts[1], zone.verts[2], zone.verts[3],  zone.verts[4], {0,0,0,0}, {0,0,0,0}, 4, true)
-                end
-
-                trigger.action.setMarkupColorFill(self.stageDrawingId, fillColor)
-                trigger.action.setMarkupColor(self.stageDrawingId, line)
-            end
-        end
-        
-        o.ActivateStage = function(self)
-            self.isActive = true;
-
-            pcall(function()
-                self:MarkStage()
-            end)
-
-            self:PreActivate()
-            
-            local miscGroups = self.database:getMiscGroupsAtStage(self.zoneName)
-            self.logger:debug("Activating Misc groups for zone: " .. Spearhead.Util.tableLength(miscGroups))
-            for _, groupName in pairs(miscGroups) do
-                Spearhead.DcsUtil.SpawnGroupTemplate(groupName)
-            end
-
-            for _, mission in pairs(self.db.missions) do
-                if mission.missionType == Spearhead.internal.Mission.MissionType.DEAD then
-                    mission:Activate()
-                    self:AddCommmandsForMissionToAllPlayers(mission)
-                end
-            end
-            timer.scheduleFunction(activateMissionsIfApplicableAsync, self, timer.getTime() + 5)
-
-            timer.scheduleFunction(CheckContinuousAsync, self, timer.getTime() + 60)
-        end
-
-        o.ActivateMissionsIfApplicable = function (self)
-            local activeCount = 0
-
-            local availableMissions = {}
-            for _, mission in pairs(self.db.missionsByCode) do
-                local state = mission:GetState()
-
-                if state == Spearhead.internal.Mission.MissionState.ACTIVE then
-                    activeCount = activeCount + 1
-                end
-
-                if state == Spearhead.internal.Mission.MissionState.NEW then
-                    table.insert(availableMissions, mission)
-                end
-            end
-
-            local max = self.stageConfig:getMaxMissionsPerStage() or 10
-
-            local availableMissionsCount = Spearhead.Util.tableLength(availableMissions)
-            if activeCount < max and availableMissionsCount > 0  then
-                for i = activeCount+1, max do
-                    if availableMissionsCount == 0 then
-                        i = max+1 --exits this loop
-                    else
-                        local index = math.random(1, availableMissionsCount)
-                        local mission = table.remove(availableMissions, index)
-                        if mission then
-                            mission:Activate()
-                            self:AddCommmandsForMissionToAllPlayers(mission)
-                            activeCount = activeCount + 1;
-                        end
-                        availableMissionsCount = availableMissionsCount - 1
-                    end
-                end
-            end
-
-        end
-
-        ---Cleans up all missions
-        ---@param self table
-        o.Clean = function(self)
-            for key, mission in pairs(self.db.missions) do
-                mission:Cleanup()
-            end
-
-            for key, samMission in pairs(self.db.sams) do
-                samMission:Cleanup()
-            end
-
-            for _, airbase in pairs(self.db.airbases) do
-                for _, redGroupName in pairs(airbase.redAirbaseGroupNames) do
-                    Spearhead.DcsUtil.DcsUtil.DestroyGroup(redGroupName)
-                end
-            end
-
-            logger:debug("'" .. Spearhead.Util.toString(self.zoneName) .. "' cleaned")
-        end
-
-        local ActivateBlueAsync = function(self)
-            pcall(function()
-                self:MarkStage(true)
-            end)
-
-            for key, airbaseId in pairs(self.db.airbaseIds) do
-                local airbase = Spearhead.DcsUtil.getAirbaseById(airbaseId)
-
-                if airbase then
-                    local startingCoalition = Spearhead.DcsUtil.getStartingCoalition(airbaseId)
-                    if startingCoalition == coalition.side.BLUE then
-                        airbase:setCoalition(2)
-                        for _, blueGroupName in pairs(self.db.blueAirbasegroups) do
-                            Spearhead.DcsUtil.SpawnGroupTemplate(blueGroupName)
-                        end
-                    else
-                        airbase:setCoalition(0)
-                    end
-                end
-            end
-        end
-
-        ---Sets airfields to blue and spawns friendly farps
-        o.ActivateBlueStage = function(self)
-            logger:debug("Setting stage '" .. Spearhead.Util.toString(self.zoneName) .. "' to blue")
-            
-            for _, groupName in pairs(self.db.redAirbasegroups) do
-                Spearhead.DcsUtil.DestroyGroup(groupName)
-            end
-
-            for _, mission in pairs(self.db.missions) do
-                mission:Cleanup()
-            end
-
-            for _, mission in pairs(self.db.sams) do
-                mission:Cleanup()
-            end
-
-            timer.scheduleFunction(ActivateBlueAsync, self, timer.getTime() + 3)
-
-        end
-
-        o.OnStatusRequestReceived = function(self, groupId)
-            if self.activeStage ~= self.stageNumber then
-                return
-            end
-
-            trigger.action.outTextForGroup(groupId, "Status Update incoming... ", 3)
-
-            local text = "Mission Status: \n"
-
-            local  totalmissions = 0
-            local completedMissions = 0
-            for _, mission in pairs(self.db.missionsByCode) do
-                totalmissions = totalmissions + 1
-                if mission.missionState == Spearhead.internal.Mission.MissionState.ACTIVE then
-
-                    text = text .. "\n [" .. mission.code .. "] " .. mission.name .. 
-                    " ("  ..  mission.missionTypeDisplayName .. ") \n"
-                end
-               
-                if mission.missionState == Spearhead.internal.Mission.MissionState.COMPLETED then
-                    completedMissions = completedMissions + 1
-                end
-            end
-
-            local completionPercentage = math.floor((completedMissions / totalmissions) * 100)
-            text = text .. " \n Missions Complete: " .. completionPercentage .. "%" 
-
-            self.logger:debug(text)
-            trigger.action.outTextForGroup(groupId, text, 20)
-        end
-
-        o.OnStageNumberChanged = function (self, number)
-
-            if self.activeStage == number then --only activate once for a stage
-                return
-            end
-
-            local previousActive = self.activeStage
-            self.activeStage = number
-            if Spearhead.capInfo.IsCapActiveWhenZoneIsActive(self.zoneName, number) == true then
-                self:PreActivate()
-            end
-
-            if number == self.stageNumber then
-                self:ActivateStage()
-            end
-
-            if previousActive <= self.stageNumber then
-                if number > self.stageNumber then
-                    self:ActivateBlueStage()
-                    self:RemoveAllMissionCommands()
-                end
-            end
-        end
-
-        --- input = { self, groupId, missionCode }
-        local ShowBriefingClicked = function (input)
-            
-            local self = input.self
-            local groupId = input.groupId
-            local missionCode = input.missionCode
-
-            local mission  = self.db.missionsByCode[missionCode]
-            if mission then
-                mission:ShowBriefing(groupId)
-            end
-        end
-        
-        o.RemoveMissionCommands = function (self, mission)
-
-            self.logger:debug("Removing commands for: " .. mission.name)
-
-            local folderName = mission.name .. "(" .. mission.missionTypeDisplayName .. ")"
-            for i = 0, 2 do
-                local players = coalition.getPlayers(i)
-                for _, playerUnit in pairs(players) do
-                    local groupId = playerUnit:getGroup():getID()
-                    missionCommands.removeItemForGroup(groupId, { "Missions", folderName })
-                end
-            end
-        end
-
-        o.RemoveAllMissionCommands = function (self)
-            for _, mission in pairs(self.db.missionsByCode) do
-                self:RemoveMissionCommands(mission)
-            end
-        end
-
-        o.AddCommandsForMissionToGroup = function (self, groupId, mission)
-            local folderName = mission.name .. "(" .. mission.missionTypeDisplayName .. ")"
-            missionCommands.addSubMenuForGroup(groupId, folderName, { "Missions"} )
-            missionCommands.addCommandForGroup(groupId, "Show Briefing", { "Missions", folderName }, ShowBriefingClicked, { self = self, groupId = groupId, missionCode = mission.code })
-        end
-
-        o.AddCommmandsForMissionToAllPlayers = function(self, mission)
-            for i = 0, 2 do
-                local players = coalition.getPlayers(i)
-                for _, playerUnit in pairs(players) do
-                    local groupId = playerUnit:getGroup():getID()
-                    self:AddCommandsForMissionToGroup(groupId, mission)
-                end
-            end
-        end
-        
-        o.OnPlayerEntersUnit = function (self, unit)
-            if self.activeStage == self.stageNumber then
-                local groupId = unit:getGroup():getID()
-                for _, mission in pairs(self.db.missionsByCode) do
-                    if mission.missionState == Spearhead.internal.Mission.MissionState.ACTIVE then
-                        self:AddCommandsForMissionToGroup(groupId, mission)
-                    end
-                end
-            end
-        end
-
-        local removeMissionCommandsDelayed = function(input)
-            local self = input.self
-            local mission = input.mission
-            self:RemoveMissionCommands(mission)
-        end
-        
-        o.OnMissionComplete = function(self, mission)
-            timer.scheduleFunction(removeMissionCommandsDelayed, { self = self, mission = mission}, timer.getTime() + 20)
-
-            if(self:IsComplete()) then
-                timer.scheduleFunction(triggerStageCompleteListeners, self, timer.getTime() + 15)
-            else
-                timer.scheduleFunction(activateMissionsIfApplicableAsync, self, timer.getTime() + 10)
-            end
-        end
-
-        for _, mission in pairs(o.db.missionsByCode) do
-            mission:AddMissionCompleteListener(o)
-        end
-
-        Spearhead.Events.AddOnPlayerEnterUnitListener(o)
-        Spearhead.Events.AddOnStatusRequestReceivedListener(o)
-        Spearhead.Events.AddStageNumberChangedListener(o)
-        return o
-    end
-end
-
-if not Spearhead.internal then Spearhead.internal = {} end
-Spearhead.internal.Stage = Stage
-end --Stage.lua
-do --GlobalStageManager.lua
-
-
-local StagesByName = {}
-local StagesByIndex = {}
-
-
-GlobalStageManager = {}
-function GlobalStageManager:NewAndStart(database, stageConfig)
-    local logger = Spearhead.LoggerTemplate:new("StageManager", stageConfig.logLevel)
-    local o = {}
-    setmetatable(o, { __index = self })
-
-    o.logger = logger
-
-    o.onStageCompleted = function(self, stage) 
-        local stageNumber = tostring(stage.stageNumber)
-        local anyActive = false
-        for _, stage in pairs(StagesByIndex[stageNumber] or {}) do
-            if stage.isActive then anyActive = true end
-        end
-
-        if anyActive == false and stageConfig:isAutoStages() == true then
-            Spearhead.Events.PublishStageNumberChanged(tonumber(stageNumber) + 1)
-        end
-
-    end
-
-    for _, stageName in pairs(database:getStagezoneNames()) do
-
-        local stagelogger = Spearhead.LoggerTemplate:new(stageName, stageConfig.logLevel)
-        local stage = Spearhead.internal.Stage:new(stageName, database, stagelogger, stageConfig)
-
-        if stage then
-            stage:AddStageCompleteListener(o);
-            StagesByName[stageName]  = stage
-            local indexString = tostring(stage.stageNumber)
-            if StagesByIndex[indexString] == nil then StagesByIndex[indexString] = {} end
-            table.insert(StagesByIndex[indexString], stage)
-            logger:info("Initiated " .. Spearhead.Util.tableLength(StagesByName) .. " airbases for cap")
-        end
-    end
-
-    return o
-end
-
-if not Spearhead.internal then Spearhead.internal = {} end
-Spearhead.internal.GlobalStageManager = GlobalStageManager
-
-end --GlobalStageManager.lua
-do --Mission.lua
-
---- A mission Object.
-local Mission = {}
-do -- INIT Mission Class
-
-    local MINIMAL_UNITS_ALIVE_RATIO = 0.20
-
-    local Defaults = {}
-    Defaults.MainMenu = "Missions"
-    Defaults.SelectMenuSubMenus = { Defaults.MainMenu, "Select Mission" }
-    Defaults.ShowMissionSubs = { Defaults.MainMenu }
-
-    local PlayersInMission = {}
-    local MissionType = {
-        UNKNOWN = 0,
-        STRIKE = 1,
-        BAI = 2,
-        DEAD = 3,
-        SAM = 4,
-    }
-
-    do --INIT MISSION TYPE FUNCTIONS
-        ---Parse string to mission type
-        ---@param input string
-        MissionType.Parse = function(input)
-            if input == nil then
-                return Mission.MissionType.UNKNOWN
-            end
-
-            input = string.lower(input)
-            if input == "dead" then return MissionType.DEAD end
-            if input == "strike" then return MissionType.STRIKE end
-            if input == "bai" then return MissionType.BAI end
-            if input == "sam" then return MissionType.SAM end
-            return Mission.MissionType.UNKNOWN
-        end
-
-        ---comment
-        ---@param input number missionType
-        ---@return string text
-        MissionType.toString = function(input)
-            if input == MissionType.DEAD then return "DEAD" end
-            if input == MissionType.STRIKE then return "STRIKE" end
-            if input == MissionType.BAI then return "BAI" end
-            if input == MissionType.SAM then return "SAM" end
-            return "?"
-        end
-    end
-    Mission.MissionType = MissionType
-
-    Mission.MissionState = {
-        NEW = 0,
-        ACTIVE = 1,
-        COMPLETED = 2,
-    }
-
-    ---comment
-    ---@param missionZoneName string missionZoneName
-    ---@param database table db dependency injection
-    ---@return table?
-    function Mission:new(missionZoneName, database, logger)
-        local o = {}
-        setmetatable(o, { __index = self })
-
-        local function ParseGroupName(input)
-            local split_name = Spearhead.Util.split_string(input, "_")
-            local split_length = Spearhead.Util.tableLength(split_name)
-            if Spearhead.Util.startswith(input, "RANDOMMISSION") == true and split_length < 4 then
-                Spearhead.AddMissionEditorWarning("Random Mission with zonename " .. input .. " not in right format")
-                return nil
-            elseif split_length < 3 then
-                Spearhead.AddMissionEditorWarning("Mission with zonename" .. input .. " not in right format")
-                return nil
-            end
-            local type = split_name[2]
-            local parsedType = Mission.MissionType.Parse(type)
-    
-            if parsedType == nil then
-                Spearhead.AddMissionEditorWarning("Mission with zonename '" .. input .. "' has an unsupported type '" .. (type or "nil" ))
-                return nil
-            end
-            local name = split_name[3]
-            return {
-                missionName = name,
-                type = parsedType
-            }
-        end
-
-        local parsed = ParseGroupName(missionZoneName)
-        if parsed == nil then return nil end
-
-        o.missionZoneName = missionZoneName
-        o.database = database
-        o.groupNames = database:getGroupsForMissionZone(missionZoneName)
-        o.name = parsed.missionName
-        o.missionType = parsed.type
-        o.missionTypeDisplayName = Mission.MissionType.toString(o.missionType)
-        o.startingGroups = Spearhead.Util.tableLength(o.groupNames)
-        o.missionState = Mission.MissionState.NEW
-        o.missionbriefing = database:GetDescriptionForMission(missionZoneName)
-        o.startingUnits = 0
-        o.logger = logger
-        o.code = database:GetNewMissionCode()
-
-        o.groupNamesPerUnit = {}
-
-        o.groupUnitAliveDict = {}
-        o.targetAliveStates = {}
-        o.hasSpecificTargets = false
-
-        local CheckStateAsync = function (self, time)
-            self:CheckAndUpdateSelf()
-            return nil
-        end
-
-        o.GetState = function(self)
-            return self.missionState
-        end
-
-        o.OnUnitLost = function(self, object)
-            --[[
-                OnUnit lost event
-            ]]--
-            self.logger:debug("Getting on unit lost event")
-
-            local category = Object.getCategory(object)
-            if category == Object.Category.UNIT then
-                local unitName = object:getName()
-                self.logger:debug("UnitName:" .. unitName)
-                local groupName = self.groupNamesPerUnit[unitName]
-                self.groupUnitAliveDict[groupName][unitName] = false
-
-                if self.targetAliveStates[groupName][unitName] then
-                    self.targetAliveStates[groupName][unitName] = false
-                end
-            elseif category == Object.Category.STATIC  then
-                local name = object:getName()
-                self.groupUnitAliveDict[name][name] = false
-
-                self.logger:debug("Name " .. name)
-
-                if self.targetAliveStates[name][name] then
-                    self.targetAliveStates[name][name] = false
-                end
-            end
-            timer.scheduleFunction(CheckStateAsync, self, timer.getTime() + 1)
-        end
-
-        o.MissionCompleteListeners = {}
-        ---comment
-        ---@param self table
-        ---@param listener table Object that implements "OnMissionComplete(self, mission)"
-        o.AddMissionCompleteListener = function(self, listener)
-            if type(listener) ~= "table" then
-                return
-            end
-            
-            table.insert(self.MissionCompleteListeners, listener)
-        end
-
-        local TriggerMissionComplete = function(self)
-            for _, callable in pairs(self.MissionCompleteListeners) do
-                local succ, err = pcall( function() 
-                    callable:OnMissionComplete(self)
-                end)
-                if err then
-                    self.logger:warn("Error in misstion complete listener:" .. err)
-                end
-            end
-        end
-
-
-        local StartCheckingAndUpdateSelfContinuous = function (self)
-            local CheckAndUpdate = function(self, time)
-                self:CheckAndUpdateSelf(true)
-                if self.missionState == Mission.MissionState.COMPLETED or self.missionState == Mission.MissionState.NEW then
-                    return nil
-                else
-                    return time + 60
-                end
-            end
-
-            timer.scheduleFunction(CheckAndUpdate, self, timer.getTime() + 300)
-        end
-
-        ---comment
-        ---@param self table
-        ---@param checkUnitHealth boolean?
-        o.CheckAndUpdateSelf = function(self, checkUnitHealth)
-            if not checkUnitHealth then checkUnitHealth = false end
-
-            if checkUnitHealth == true then
-                local function unitAliveState(unitName)
-                    local unit = Unit.getByName(unitName)
-                    return unit ~= nil and unit:isExist() == true and unit:getLife() > 0.1
-                end
-
-                for groupName, unitNameDict in pairs(self.groupUnitAliveDict) do
-                    for unitName, isAlive in pairs(unitNameDict) do
-                        if isAlive == true then
-                            self.groupUnitAliveDict[groupName][unitName] = unitAliveState(unitName)
-                        end
-                    end
-                end
-
-                for groupName, unitNameDict in pairs(self.targetAliveStates) do
-                    for unitName, isAlive in pairs(unitNameDict) do
-                        if isAlive == true then
-                            self.targetAliveStates[groupName][unitName] = unitAliveState(unitName)
-                        end
-                    end
-                end
-            end
-
-            if self.missionState == Mission.MissionState.COMPLETED then
-                return
-            end
-
-            if self.hasSpecificTargets == true then
-                local specificTargetsAlive = false
-                for groupName, unitNameDict in pairs(self.targetAliveStates) do
-                    for unitName, isAlive in pairs(unitNameDict) do
-                        if isAlive == true then
-                            specificTargetsAlive = true
-                        end
-                    end
-                end
-                if specificTargetsAlive == false then
-                    self.missionState = Mission.MissionState.COMPLETED
-                end
-            else
-                local function CountAliveGroups()
-
-                    self.logger:debug(self.groupUnitAliveDict)
-
-                    local aliveGroups = 0
-
-                    for _, group in pairs(self.groupUnitAliveDict) do
-                        local groupTotal = 0
-                        local groupDeath = 0
-                        for _, isAlive in pairs(group) do
-                            if isAlive ~= true then
-                                groupDeath = groupDeath + 1
-                            end
-                            groupTotal = groupTotal + 1
-                        end
-
-                        local aliveRatio = (groupTotal - groupDeath) / groupTotal
-                        if aliveRatio >= MINIMAL_UNITS_ALIVE_RATIO then
-                            aliveGroups = aliveGroups + 1
-                        end
-                    end
-
-                    return aliveGroups
-                end
-                
-                if self.missionType == Mission.MissionType.STRIKE then --strike targets should normally have TGT targets
-                    if CountAliveGroups() == 0 then
-                        self.missionState = Mission.MissionState.COMPLETED
-                    end
-                elseif self.missionType == Mission.MissionType.BAI then
-                    if CountAliveGroups() == 0 then
-                        self.missionState = Mission.MissionState.COMPLETED
-                    end
-                end
-                --[[
-                    TODO: Other checks for mission complete 
-                ]]
-            end
-
-            if self.missionState == Mission.MissionState.COMPLETED then
-                self.logger:debug("Mission complete " .. self.name)
-                trigger.action.outText("Mission " .. self.name .. " (" .. self.code .. ") was completed succesfully!", 20)
-
-                TriggerMissionComplete(self)
-                --Schedule cleanup after 5 minutes of mission complete
-                --timer.scheduleFunction(CleanupDelayedAsync, self, timer.getTime() + 300)
-            end
-        end
-
-        ---Activates groups for this mission
-        ---@param self table
-        o.Activate = function(self)
-            if self.missionState == Mission.MissionState.ACTIVE then
-                return
-            end
-
-            self.missionState = Mission.MissionState.ACTIVE
-            do --spawn groups
-                for key, groupname in pairs(self.groupNames) do
-                    Spearhead.DcsUtil.SpawnGroupTemplate(groupname)
-                end
-            end
-
-            StartCheckingAndUpdateSelfContinuous(self)
-        end
-
-        local ToStateString = function(self)
-            if self.hasSpecificTargets then
-                local dead = 0
-                local total = 0
-                for _, group in pairs(self.targetAliveStates) do
-                    for _, isAlive in pairs(group) do
-                        total = total + 1
-                        if isAlive == false then
-                            dead = dead + 1
-                        end
-                    end
-                end
-                local completionPercentage = math.floor((dead / total) * 100)
-                return "Targets Destroyed: " .. completionPercentage .. "%"
-            else
-                local dead = 0
-                local total = 0
-                for _, group in pairs(self.groupUnitAliveDict) do
-                    for _, isAlive in pairs(group) do
-                        total = total + 1
-                        if isAlive == false then
-                            dead = dead + 1
-                        end
-                    end
-                end
-
-                local completionPercentage = math.floor((dead / total) * 100)
-                return "Targets Destroyed: " .. completionPercentage .. "%"
-            end
-        end
-
-        o.ShowBriefing = function(self, groupId)
-            local stateString = ToStateString(self)
-
-            if self.missionbriefing == nil then self.missionbriefing = "No briefing available" end
-            local text = "Mission [" .. self.code .. "] ".. self.name .. "\n \n" .. self.missionbriefing .. " \n \n" .. stateString
-            trigger.action.outTextForGroup(groupId, text, 30);
-        end
-
-        o.Cleanup = function(self)
-            for key, groupName in pairs(self.groupNames) do
-                Spearhead.DcsUtil.DestroyGroup(groupName)
-            end
-        end
-
-        local Init = function(self)
-            for key, group_name in pairs(self.groupNames) do
-
-
-                self.groupUnitAliveDict[group_name] = {}
-                self.targetAliveStates[group_name] = {}
-
-                if Spearhead.DcsUtil.IsGroupStatic(group_name) then
-                    Spearhead.Events.addOnUnitLostEventListener(group_name, self)
-
-                    if Spearhead.Util.startswith(group_name, "TGT_") == true then
-                        self.targetAliveStates[group_name][group_name] = true
-                        self.hasSpecificTargets = true
-                    end
-                else
-                    local group = Group.getByName(group_name)
-                    local isGroupTarget = Spearhead.Util.startswith(group_name, "TGT_")
-
-                    self.startingUnits = self.startingUnits + group:getInitialSize()
-                    for _, unit in pairs(group:getUnits()) do
-                        local unitName = unit:getName()
-
-                        self.groupNamesPerUnit[unitName] = group_name
-
-                        Spearhead.Events.addOnUnitLostEventListener(unitName, self)
-                        
-
-                        if isGroupTarget == true or Spearhead.Util.startswith(unitName, "TGT_") == true then
-                            self.targetAliveStates[group_name][unitName] = true
-                            self.hasSpecificTargets = true
-                        end
-
-                        if self.missionType == MissionType.BAI then
-                            if Spearhead.DcsUtil.IsGroupStatic(group_name) ~= true then
-                                self.groupUnitAliveDict[group_name][unitName] = true
-                            end
-                        elseif self.missionType == MissionType.DEAD or self.missionType == MissionType.SAM then
-                            local desc = unit:getDesc()
-                            local attributes = desc.attributes
-                            if attributes["SAM"] == true or attributes["SAM TR"] or attributes["AAA"] then
-                                self.targetAliveStates[group_name][unitName] = true
-                                self.hasSpecificTargets = true
-                            end
-                        else
-                            self.groupUnitAliveDict[group_name][unitName] = true
-                        end
-                    end
-                end
-                Spearhead.DcsUtil.DestroyGroup(group_name)
-            end
-        end
-
-        Init(o)
-        return o;
-    end
-end
-
-if not Spearhead.internal then Spearhead.internal = {} end
-Spearhead.internal.Mission = Mission
-end --Mission.lua
-do --StageConfig.lua
-
-local StageConfig = {};
-function StageConfig:new()
-    local o = {}
-    setmetatable(o, { __index = self })
-
-    if SpearheadConfig == nil then SpearheadConfig = {} end
-    if SpearheadConfig.StageConfig == nil then SpearheadConfig.StageConfig = {} end
-
-    local enabled = SpearheadConfig.StageConfig.enabled
-    if enabled == nil then enabled = true end
-    ---@return boolean
-    o.isEnabled = function(self) return enabled == true end
-
-    local drawStages = SpearheadConfig.StageConfig.drawStages
-    if drawStages == nil then drawStages = true end
-    ---@return boolean
-    o.isDrawStagesEnabled = function(self) return drawStages == true end
-
-    local autoStages = SpearheadConfig.StageConfig.autoStages or true
-    if autoStages == nil then autoStages = true end
-    ---@return boolean
-    o.isAutoStages = function(self) return autoStages end
-
-    local maxMissionsPerStage = SpearheadConfig.StageConfig.maxMissionStage
-    o.getMaxMissionsPerStage = function(self) return maxMissionsPerStage end
-
-    o.logLevel  = Spearhead.LoggerTemplate.LogLevelOptions.INFO
-
-    o.toString = function()
-        return Spearhead.Util.toString({
-            maxMissionsPerStage = maxMissionsPerStage,
-            enabled = enabled, 
-            drawStages = drawStages,
-            autoStages = autoStages
-        })
-    end
-
-    return o;
-end
-
-if not Spearhead.internal then Spearhead.internal = {} end
-if not Spearhead.internal.configuration then Spearhead.internal.configuration = {} end
-Spearhead.internal.configuration.StageConfig = StageConfig;
-end --StageConfig.lua
-do --CapConfig.lua
-
-
-local CapConfig = {};
-function CapConfig:new()
-    local o = {}
-    setmetatable(o, { __index = self })
-
-    if SpearheadConfig == nil then SpearheadConfig = {} end
-    if SpearheadConfig.CapConfig == nil then SpearheadConfig.CapConfig = {} end
-
-    local enabled = SpearheadConfig.CapConfig.enabled
-    if enabled == nil then enabled = true end
-    ---@return boolean
-    o.isEnabled = function(self) return enabled == true end
-
-    local minSpeed = (tonumber(SpearheadConfig.CapConfig.minSpeed) or 400) * 0.514444
-    ---@return number
-    o.getMinSpeed = function(self) return minSpeed end
-
-    local maxSpeed = (tonumber(SpearheadConfig.CapConfig.maxSpeed) or 400) * 0.514444
-    ---@return number
-    o.getMaxSpeed = function(self) return maxSpeed end
-
-    local minAlt = (tonumber(SpearheadConfig.CapConfig.minAlt) or 18000) * 0.3048
-    ---@return number
-    o.getMinAlt = function(self) return minAlt end
-
-    local maxAlt = (tonumber(SpearheadConfig.CapConfig.maxAlt) or 28000) * 0.3048
-    ---@return number
-    o.getMaxAlt = function(self) return maxAlt end
-
-    local minDurationOnStation  = 1200
-    ---@return number
-    o.getMinDurationOnStation = function(self) return minDurationOnStation end
-
-    local maxDurationOnStation = 2700
-    ---@return number
-    o.getmaxDurationOnStation = function(self) return maxDurationOnStation end
-
-    local maxDeviationRange = 20 * 1852;
-     ---@return number
-    o.getMaxDeviationRange = function(self) return maxDeviationRange end
-
-    local rearmDelay = tonumber(SpearheadConfig.CapConfig.rearmDelay) or 600
-    ---@return number
-    o.getRearmDelay = function(self) return rearmDelay end
-
-    local deathDelay = tonumber(SpearheadConfig.CapConfig.deathDelay) or 1800
-    ---@return number
-    o.getDeathDelay = function(self) return deathDelay end
-    o.logLevel  = Spearhead.LoggerTemplate.LogLevelOptions.INFO
-
-    return o;
-end
-
-if not Spearhead.internal then Spearhead.internal = {} end
-if not Spearhead.internal.configuration then Spearhead.internal.configuration = {} end
-Spearhead.internal.configuration.CapConfig = CapConfig;
-end --CapConfig.lua
 do --CapAirbase.lua
 
 local CapBase = {}
@@ -4313,6 +3159,1223 @@ if not Spearhead.internal then Spearhead.internal = {} end
 Spearhead.internal.CapGroup = CapGroup
 
 end --CapGroup.lua
+do --StageConfig.lua
+
+local StageConfig = {};
+function StageConfig:new()
+    local o = {}
+    setmetatable(o, { __index = self })
+
+    if SpearheadConfig == nil then SpearheadConfig = {} end
+    if SpearheadConfig.StageConfig == nil then SpearheadConfig.StageConfig = {} end
+
+    local enabled = SpearheadConfig.StageConfig.enabled
+    if enabled == nil then enabled = true end
+    ---@return boolean
+    o.isEnabled = function(self) return enabled == true end
+
+    local drawStages = SpearheadConfig.StageConfig.drawStages
+    if drawStages == nil then drawStages = true end
+    ---@return boolean
+    o.isDrawStagesEnabled = function(self) return drawStages == true end
+
+    local autoStages = SpearheadConfig.StageConfig.autoStages or true
+    if autoStages == nil then autoStages = true end
+    ---@return boolean
+    o.isAutoStages = function(self) return autoStages end
+
+    local maxMissionsPerStage = SpearheadConfig.StageConfig.maxMissionStage
+    o.getMaxMissionsPerStage = function(self) return maxMissionsPerStage end
+
+    o.logLevel  = Spearhead.LoggerTemplate.LogLevelOptions.INFO
+
+    o.toString = function()
+        return Spearhead.Util.toString({
+            maxMissionsPerStage = maxMissionsPerStage,
+            enabled = enabled, 
+            drawStages = drawStages,
+            autoStages = autoStages
+        })
+    end
+
+    return o;
+end
+
+if not Spearhead.internal then Spearhead.internal = {} end
+if not Spearhead.internal.configuration then Spearhead.internal.configuration = {} end
+Spearhead.internal.configuration.StageConfig = StageConfig;
+end --StageConfig.lua
+do --CapConfig.lua
+
+
+local CapConfig = {};
+function CapConfig:new()
+    local o = {}
+    setmetatable(o, { __index = self })
+
+    if SpearheadConfig == nil then SpearheadConfig = {} end
+    if SpearheadConfig.CapConfig == nil then SpearheadConfig.CapConfig = {} end
+
+    local enabled = SpearheadConfig.CapConfig.enabled
+    if enabled == nil then enabled = true end
+    ---@return boolean
+    o.isEnabled = function(self) return enabled == true end
+
+    local minSpeed = (tonumber(SpearheadConfig.CapConfig.minSpeed) or 400) * 0.514444
+    ---@return number
+    o.getMinSpeed = function(self) return minSpeed end
+
+    local maxSpeed = (tonumber(SpearheadConfig.CapConfig.maxSpeed) or 400) * 0.514444
+    ---@return number
+    o.getMaxSpeed = function(self) return maxSpeed end
+
+    local minAlt = (tonumber(SpearheadConfig.CapConfig.minAlt) or 18000) * 0.3048
+    ---@return number
+    o.getMinAlt = function(self) return minAlt end
+
+    local maxAlt = (tonumber(SpearheadConfig.CapConfig.maxAlt) or 28000) * 0.3048
+    ---@return number
+    o.getMaxAlt = function(self) return maxAlt end
+
+    local minDurationOnStation  = 1200
+    ---@return number
+    o.getMinDurationOnStation = function(self) return minDurationOnStation end
+
+    local maxDurationOnStation = 2700
+    ---@return number
+    o.getmaxDurationOnStation = function(self) return maxDurationOnStation end
+
+    local maxDeviationRange = 20 * 1852;
+     ---@return number
+    o.getMaxDeviationRange = function(self) return maxDeviationRange end
+
+    local rearmDelay = tonumber(SpearheadConfig.CapConfig.rearmDelay) or 600
+    ---@return number
+    o.getRearmDelay = function(self) return rearmDelay end
+
+    local deathDelay = tonumber(SpearheadConfig.CapConfig.deathDelay) or 1800
+    ---@return number
+    o.getDeathDelay = function(self) return deathDelay end
+    o.logLevel  = Spearhead.LoggerTemplate.LogLevelOptions.INFO
+
+    return o;
+end
+
+if not Spearhead.internal then Spearhead.internal = {} end
+if not Spearhead.internal.configuration then Spearhead.internal.configuration = {} end
+Spearhead.internal.configuration.CapConfig = CapConfig;
+end --CapConfig.lua
+do --GlobalFleetManager.lua
+
+
+local GlobalFleetManager = {}
+
+local fleetGroups = {}
+
+GlobalFleetManager.start = function(database)
+
+    local logger = Spearhead.LoggerTemplate:new("CARRIERFLEET", Spearhead.LoggerTemplate.LogLevelOptions.INFO)
+
+    local all_groups = Spearhead.DcsUtil.getAllGroupNames()
+    for _, groupName in pairs(all_groups) do
+        if Spearhead.Util.startswith(string.lower(groupName), "carriergroup" ) == true then
+            logger:info("Registering " .. groupName .. " as a managed fleet")
+            local carrierGroup = Spearhead.internal.FleetGroup:new(groupName, database, logger)
+            table.insert(fleetGroups, carrierGroup)
+        end
+    end
+end
+
+if not Spearhead.internal then Spearhead.internal = {} end
+Spearhead.internal.GlobalFleetManager = GlobalFleetManager
+end --GlobalFleetManager.lua
+do --FleetGroup.lua
+local FleetGroup = {}
+
+function FleetGroup:new(fleetGroupName, database, logger)
+    local o = {}
+
+    setmetatable(o, { __index = self })
+
+    o.fleetGroupName = fleetGroupName
+    o.logger = logger
+
+    local split_name = Spearhead.Util.split_string(fleetGroupName, "_")
+    if Spearhead.Util.tableLength(split_name) < 2 then
+        Spearhead.AddMissionEditorWarning("CARRIERGROUP should have at least 2 parts. CARRIERGROUP_<fleetname>")
+        return nil
+    end
+    o.fleetNameIdentifier = split_name[2]
+
+    o.targetZonePerStage = {}
+    o.currentTargetZone = nil
+    o.pointsPerZone = {}
+
+    do --INIT
+        local carrierRouteZones = database:getCarrierRouteZones()
+        for _, zoneName in pairs(carrierRouteZones) do
+            if Spearhead.Util.strContains(string.lower(zoneName), "_".. string.lower(o.fleetNameIdentifier) .. "_" ) == true then
+                local zone = Spearhead.DcsUtil.getZoneByName(zoneName)
+                if zone and zone.zone_type == Spearhead.DcsUtil.ZoneType.Polygon then
+                    local split_string = Spearhead.Util.split_string(zoneName, "_")
+                    if Spearhead.Util.tableLength(split_string) < 3 then
+                        Spearhead.AddMissionEditorWarning(
+                            "CARRIERROUTE should at least have 3 parts. Check the documentation for: " .. zoneName)
+                    else
+                        local function GetTwoFurthestPoints(zone)
+                            local function getDist(a, b)
+                                return math.sqrt((b.x - a.x) ^ 2 + (b.z - a.z) ^ 2)
+                            end
+
+                            local biggest = nil
+                            local biggestA = nil
+                            local biggestB = nil
+
+                            for i = 1, 3 do
+                                for ii = i + 1, 4 do
+                                    local a = zone.verts[i]
+                                    local b = zone.verts[ii]
+                                    local dist = getDist(a, b)
+
+                                    if biggest == nil or dist > biggest then
+                                        biggestA = a
+                                        biggestB = b
+                                        biggest = dist
+                                    end
+                                end
+                            end
+                            return { x = biggestA.x, z = biggestA.z }, { x = biggestB.x, z = biggestB.z }
+                        end
+
+                        local function getMinMaxStage(namePart)
+                            if namePart == nil then
+                                return nil, nil
+                            end
+
+                            if Spearhead.Util.startswith(namePart, "%[") == true then
+                                namePart = Spearhead.Util.split_string(namePart, "[")[1]
+                            end
+
+                            if Spearhead.Util.strContains(namePart, "%]") == true then
+                                namePart = Spearhead.Util.split_string(namePart, "]")[1]
+                            end
+
+                            local split_numbers = Spearhead.Util.split_string(namePart, "-")
+                            if Spearhead.Util.tableLength(split_numbers) < 2  then
+                                Spearhead.AddMissionEditorWarning("CARRIERROUTE zone stage numbers not in the format _[<number>-<number>]: " .. zoneName)
+                                return nil, nil
+                            end
+
+                            local first = tonumber(split_numbers[1])
+                            local second = tonumber(split_numbers[2])
+
+                            if first == nil or second == nil  then
+                                Spearhead.AddMissionEditorWarning("CARRIERROUTE zone stage numbers not in the format _[<number>-<number>]: " .. zoneName)
+                                return nil, nil
+                            end
+                            return first, second
+                        end
+
+                        local pointA, pointB = GetTwoFurthestPoints(zone)
+                        local first, second = getMinMaxStage(split_string[3])
+                        if first ~= nil and second ~= nil then
+                            for i = first, second do
+                                o.targetZonePerStage[tostring(i)] = zoneName
+                            end
+                            o.pointsPerZone[zoneName] = { pointA = pointA, pointB = pointB }
+                        else
+                            Spearhead.AddMissionEditorWarning("CARRIERROUTE zone stage numbers not in the format _[<number>-<number>]: " .. zoneName)
+                        end
+                    end
+                else
+                    Spearhead.AddMissionEditorWarning("CARRIERROUTE cannot be a cilinder: " .. zoneName)
+                end
+            end
+        end
+    end
+
+    local SetTaskAsync = function(input, time)
+        local targetZone = input.targetZone
+        local task = input.task
+        local groupName = input.groupName
+        local logger = input.logger
+
+        local group = Group.getByName(groupName)
+        if group then
+            logger:info("Sending " .. fleetGroupName .. " to " .. targetZone)
+            group:getController():setTask(task)
+        end
+    end
+
+    o.OnStageNumberChanged = function(self, number)
+        local targetZone = self.targetZonePerStage[tostring(number)]
+        if targetZone and targetZone ~= self.currentTargetZone then
+            local points = self.pointsPerZone[targetZone]
+            local task  = Spearhead.RouteUtil.CreateCarrierRacetrack(points.pointA, points.pointB)
+            timer.scheduleFunction(SetTaskAsync, { task = task, targetZone = targetZone,  groupName = self.fleetGroupName, logger = self.logger }, timer.getTime() + 5)
+        end
+    end
+
+    Spearhead.Events.AddStageNumberChangedListener(o)
+    return o
+end
+
+if not Spearhead.internal then Spearhead.internal = {} end
+Spearhead.internal.FleetGroup = FleetGroup
+
+end --FleetGroup.lua
+do --Mission.lua
+
+--- A mission Object.
+local Mission = {}
+do -- INIT Mission Class
+
+    local MINIMAL_UNITS_ALIVE_RATIO = 0.20
+
+    local Defaults = {}
+    Defaults.MainMenu = "Missions"
+    Defaults.SelectMenuSubMenus = { Defaults.MainMenu, "Select Mission" }
+    Defaults.ShowMissionSubs = { Defaults.MainMenu }
+
+    local PlayersInMission = {}
+    local MissionType = {
+        UNKNOWN = 0,
+        STRIKE = 1,
+        BAI = 2,
+        DEAD = 3,
+        SAM = 4,
+    }
+
+    do --INIT MISSION TYPE FUNCTIONS
+        ---Parse string to mission type
+        ---@param input string
+        MissionType.Parse = function(input)
+            if input == nil then
+                return Mission.MissionType.UNKNOWN
+            end
+
+            input = string.lower(input)
+            if input == "dead" then return MissionType.DEAD end
+            if input == "strike" then return MissionType.STRIKE end
+            if input == "bai" then return MissionType.BAI end
+            if input == "sam" then return MissionType.SAM end
+            return Mission.MissionType.UNKNOWN
+        end
+
+        ---comment
+        ---@param input number missionType
+        ---@return string text
+        MissionType.toString = function(input)
+            if input == MissionType.DEAD then return "DEAD" end
+            if input == MissionType.STRIKE then return "STRIKE" end
+            if input == MissionType.BAI then return "BAI" end
+            if input == MissionType.SAM then return "SAM" end
+            return "?"
+        end
+    end
+    Mission.MissionType = MissionType
+
+    Mission.MissionState = {
+        NEW = 0,
+        ACTIVE = 1,
+        COMPLETED = 2,
+    }
+
+    ---comment
+    ---@param missionZoneName string missionZoneName
+    ---@param database table db dependency injection
+    ---@return table?
+    function Mission:new(missionZoneName, database, logger)
+        local o = {}
+        setmetatable(o, { __index = self })
+
+        local function ParseGroupName(input)
+            local split_name = Spearhead.Util.split_string(input, "_")
+            local split_length = Spearhead.Util.tableLength(split_name)
+            if Spearhead.Util.startswith(input, "RANDOMMISSION") == true and split_length < 4 then
+                Spearhead.AddMissionEditorWarning("Random Mission with zonename " .. input .. " not in right format")
+                return nil
+            elseif split_length < 3 then
+                Spearhead.AddMissionEditorWarning("Mission with zonename" .. input .. " not in right format")
+                return nil
+            end
+            local type = split_name[2]
+            local parsedType = Mission.MissionType.Parse(type)
+    
+            if parsedType == nil then
+                Spearhead.AddMissionEditorWarning("Mission with zonename '" .. input .. "' has an unsupported type '" .. (type or "nil" ))
+                return nil
+            end
+            local name = split_name[3]
+            return {
+                missionName = name,
+                type = parsedType
+            }
+        end
+
+        local parsed = ParseGroupName(missionZoneName)
+        if parsed == nil then return nil end
+
+        o.missionZoneName = missionZoneName
+        o.database = database
+        o.groupNames = database:getGroupsForMissionZone(missionZoneName)
+        o.name = parsed.missionName
+        o.missionType = parsed.type
+        o.missionTypeDisplayName = Mission.MissionType.toString(o.missionType)
+        o.startingGroups = Spearhead.Util.tableLength(o.groupNames)
+        o.missionState = Mission.MissionState.NEW
+        o.missionbriefing = database:GetDescriptionForMission(missionZoneName)
+        o.startingUnits = 0
+        o.logger = logger
+        o.code = database:GetNewMissionCode()
+
+        o.groupNamesPerUnit = {}
+
+        o.groupUnitAliveDict = {}
+        o.targetAliveStates = {}
+        o.hasSpecificTargets = false
+
+        local CheckStateAsync = function (self, time)
+            self:CheckAndUpdateSelf()
+            return nil
+        end
+
+        o.GetState = function(self)
+            return self.missionState
+        end
+
+        o.OnUnitLost = function(self, object)
+            --[[
+                OnUnit lost event
+            ]]--
+            self.logger:debug("Getting on unit lost event")
+
+            local category = Object.getCategory(object)
+            if category == Object.Category.UNIT then
+                local unitName = object:getName()
+                self.logger:debug("UnitName:" .. unitName)
+                local groupName = self.groupNamesPerUnit[unitName]
+                self.groupUnitAliveDict[groupName][unitName] = false
+
+                if self.targetAliveStates[groupName][unitName] then
+                    self.targetAliveStates[groupName][unitName] = false
+                end
+            elseif category == Object.Category.STATIC  then
+                local name = object:getName()
+                self.groupUnitAliveDict[name][name] = false
+
+                self.logger:debug("Name " .. name)
+
+                if self.targetAliveStates[name][name] then
+                    self.targetAliveStates[name][name] = false
+                end
+            end
+            timer.scheduleFunction(CheckStateAsync, self, timer.getTime() + 1)
+        end
+
+        o.MissionCompleteListeners = {}
+        ---comment
+        ---@param self table
+        ---@param listener table Object that implements "OnMissionComplete(self, mission)"
+        o.AddMissionCompleteListener = function(self, listener)
+            if type(listener) ~= "table" then
+                return
+            end
+            
+            table.insert(self.MissionCompleteListeners, listener)
+        end
+
+        local TriggerMissionComplete = function(self)
+            for _, callable in pairs(self.MissionCompleteListeners) do
+                local succ, err = pcall( function() 
+                    callable:OnMissionComplete(self)
+                end)
+                if err then
+                    self.logger:warn("Error in misstion complete listener:" .. err)
+                end
+            end
+        end
+
+
+        local StartCheckingAndUpdateSelfContinuous = function (self)
+            local CheckAndUpdate = function(self, time)
+                self:CheckAndUpdateSelf(true)
+                if self.missionState == Mission.MissionState.COMPLETED or self.missionState == Mission.MissionState.NEW then
+                    return nil
+                else
+                    return time + 60
+                end
+            end
+
+            timer.scheduleFunction(CheckAndUpdate, self, timer.getTime() + 300)
+        end
+
+        ---comment
+        ---@param self table
+        ---@param checkUnitHealth boolean?
+        o.CheckAndUpdateSelf = function(self, checkUnitHealth)
+            if not checkUnitHealth then checkUnitHealth = false end
+
+            if checkUnitHealth == true then
+                local function unitAliveState(unitName)
+                    local unit = Unit.getByName(unitName)
+                    return unit ~= nil and unit:isExist() == true and unit:getLife() > 0.1
+                end
+
+                for groupName, unitNameDict in pairs(self.groupUnitAliveDict) do
+                    for unitName, isAlive in pairs(unitNameDict) do
+                        if isAlive == true then
+                            self.groupUnitAliveDict[groupName][unitName] = unitAliveState(unitName)
+                        end
+                    end
+                end
+
+                for groupName, unitNameDict in pairs(self.targetAliveStates) do
+                    for unitName, isAlive in pairs(unitNameDict) do
+                        if isAlive == true then
+                            self.targetAliveStates[groupName][unitName] = unitAliveState(unitName)
+                        end
+                    end
+                end
+            end
+
+            if self.missionState == Mission.MissionState.COMPLETED then
+                return
+            end
+
+            if self.hasSpecificTargets == true then
+                local specificTargetsAlive = false
+                for groupName, unitNameDict in pairs(self.targetAliveStates) do
+                    for unitName, isAlive in pairs(unitNameDict) do
+                        if isAlive == true then
+                            specificTargetsAlive = true
+                        end
+                    end
+                end
+                if specificTargetsAlive == false then
+                    self.missionState = Mission.MissionState.COMPLETED
+                end
+            else
+                local function CountAliveGroups()
+
+                    self.logger:debug(self.groupUnitAliveDict)
+
+                    local aliveGroups = 0
+
+                    for _, group in pairs(self.groupUnitAliveDict) do
+                        local groupTotal = 0
+                        local groupDeath = 0
+                        for _, isAlive in pairs(group) do
+                            if isAlive ~= true then
+                                groupDeath = groupDeath + 1
+                            end
+                            groupTotal = groupTotal + 1
+                        end
+
+                        local aliveRatio = (groupTotal - groupDeath) / groupTotal
+                        if aliveRatio >= MINIMAL_UNITS_ALIVE_RATIO then
+                            aliveGroups = aliveGroups + 1
+                        end
+                    end
+
+                    return aliveGroups
+                end
+                
+                if self.missionType == Mission.MissionType.STRIKE then --strike targets should normally have TGT targets
+                    if CountAliveGroups() == 0 then
+                        self.missionState = Mission.MissionState.COMPLETED
+                    end
+                elseif self.missionType == Mission.MissionType.BAI then
+                    if CountAliveGroups() == 0 then
+                        self.missionState = Mission.MissionState.COMPLETED
+                    end
+                end
+                --[[
+                    TODO: Other checks for mission complete 
+                ]]
+            end
+
+            if self.missionState == Mission.MissionState.COMPLETED then
+                self.logger:debug("Mission complete " .. self.name)
+                trigger.action.outText("Mission " .. self.name .. " (" .. self.code .. ") was completed succesfully!", 20)
+
+                TriggerMissionComplete(self)
+                --Schedule cleanup after 5 minutes of mission complete
+                --timer.scheduleFunction(CleanupDelayedAsync, self, timer.getTime() + 300)
+            end
+        end
+
+        ---Activates groups for this mission
+        ---@param self table
+        o.Activate = function(self)
+            if self.missionState == Mission.MissionState.ACTIVE then
+                return
+            end
+
+            self.missionState = Mission.MissionState.ACTIVE
+            do --spawn groups
+                for key, groupname in pairs(self.groupNames) do
+                    Spearhead.DcsUtil.SpawnGroupTemplate(groupname)
+                end
+            end
+
+            StartCheckingAndUpdateSelfContinuous(self)
+        end
+
+        local ToStateString = function(self)
+            if self.hasSpecificTargets then
+                local dead = 0
+                local total = 0
+                for _, group in pairs(self.targetAliveStates) do
+                    for _, isAlive in pairs(group) do
+                        total = total + 1
+                        if isAlive == false then
+                            dead = dead + 1
+                        end
+                    end
+                end
+                local completionPercentage = math.floor((dead / total) * 100)
+                return "Targets Destroyed: " .. completionPercentage .. "%"
+            else
+                local dead = 0
+                local total = 0
+                for _, group in pairs(self.groupUnitAliveDict) do
+                    for _, isAlive in pairs(group) do
+                        total = total + 1
+                        if isAlive == false then
+                            dead = dead + 1
+                        end
+                    end
+                end
+
+                local completionPercentage = math.floor((dead / total) * 100)
+                return "Targets Destroyed: " .. completionPercentage .. "%"
+            end
+        end
+
+        o.ShowBriefing = function(self, groupId)
+            local stateString = ToStateString(self)
+
+            if self.missionbriefing == nil then self.missionbriefing = "No briefing available" end
+            local text = "Mission [" .. self.code .. "] ".. self.name .. "\n \n" .. self.missionbriefing .. " \n \n" .. stateString
+            trigger.action.outTextForGroup(groupId, text, 30);
+        end
+
+        o.Cleanup = function(self)
+            for key, groupName in pairs(self.groupNames) do
+                Spearhead.DcsUtil.DestroyGroup(groupName)
+            end
+        end
+
+        local Init = function(self)
+            for key, group_name in pairs(self.groupNames) do
+
+
+                self.groupUnitAliveDict[group_name] = {}
+                self.targetAliveStates[group_name] = {}
+
+                if Spearhead.DcsUtil.IsGroupStatic(group_name) then
+                    Spearhead.Events.addOnUnitLostEventListener(group_name, self)
+
+                    if Spearhead.Util.startswith(group_name, "TGT_") == true then
+                        self.targetAliveStates[group_name][group_name] = true
+                        self.hasSpecificTargets = true
+                    end
+                else
+                    local group = Group.getByName(group_name)
+                    local isGroupTarget = Spearhead.Util.startswith(group_name, "TGT_")
+
+                    self.startingUnits = self.startingUnits + group:getInitialSize()
+                    for _, unit in pairs(group:getUnits()) do
+                        local unitName = unit:getName()
+
+                        self.groupNamesPerUnit[unitName] = group_name
+
+                        Spearhead.Events.addOnUnitLostEventListener(unitName, self)
+                        
+
+                        if isGroupTarget == true or Spearhead.Util.startswith(unitName, "TGT_") == true then
+                            self.targetAliveStates[group_name][unitName] = true
+                            self.hasSpecificTargets = true
+                        end
+
+                        if self.missionType == MissionType.BAI then
+                            if Spearhead.DcsUtil.IsGroupStatic(group_name) ~= true then
+                                self.groupUnitAliveDict[group_name][unitName] = true
+                            end
+                        elseif self.missionType == MissionType.DEAD or self.missionType == MissionType.SAM then
+                            local desc = unit:getDesc()
+                            local attributes = desc.attributes
+                            if attributes["SAM"] == true or attributes["SAM TR"] or attributes["AAA"] then
+                                self.targetAliveStates[group_name][unitName] = true
+                                self.hasSpecificTargets = true
+                            end
+                        else
+                            self.groupUnitAliveDict[group_name][unitName] = true
+                        end
+                    end
+                end
+                Spearhead.DcsUtil.DestroyGroup(group_name)
+            end
+        end
+
+        Init(o)
+        return o;
+    end
+end
+
+if not Spearhead.internal then Spearhead.internal = {} end
+Spearhead.internal.Mission = Mission
+end --Mission.lua
+do --Stage.lua
+
+local Stage = {}
+do --init STAGE DIRECTOR
+
+
+    local stageDrawingId = 0
+
+    ---comment
+    ---@param stagezone_name string
+    ---@param database table
+    ---@param logger table
+    ---@return table?
+    function Stage:new(stagezone_name, database, logger, stageConfig)
+        local o = {}
+        setmetatable(o, { __index = self })
+
+        o.zoneName = stagezone_name
+
+        local split = Spearhead.Util.split_string(stagezone_name, "_")
+        if Spearhead.Util.tableLength(split) < 2 then
+            Spearhead.AddMissionEditorWarning("Stage zone with name " .. stagezone_name .. " does not have a order number or valid format")
+            return nil
+        end
+
+        local orderNumber = tonumber(split[2])
+        if orderNumber == nil then
+            Spearhead.AddMissionEditorWarning("Stage zone with name " .. stagezone_name .. " does not have a valid order number : " .. split[2])
+            return nil
+        end
+
+        o.stageNumber = orderNumber
+        o.isActive = false
+        o.database = database
+        o.logger = logger
+        o.db = {}
+        o.db.missionsByCode = {}
+        o.db.missions = {}
+        o.db.sams = {}
+        o.db.redAirbasegroups = {}
+        o.db.blueAirbasegroups = {}
+        o.db.blueSamGroups = {}
+        o.db.airbaseIds = {}
+        o.db.farps = {}
+        o.activeStage = -99
+        o.preActivated = false
+        o.stageConfig = stageConfig or {}
+        o.stageDrawingId = stageDrawingId + 1
+
+        stageDrawingId = stageDrawingId + 1
+
+        do --Init Stage
+            logger:info("Initiating new Stage with name: " .. stagezone_name)
+
+            local missionZones = database:getMissionsForStage(stagezone_name)
+            for _, missionZone in pairs(missionZones) do
+                local mission = Spearhead.internal.Mission:new(missionZone, database, logger)
+                if mission then
+                    o.db.missionsByCode[mission.code] = mission
+                    if mission.missionType == Spearhead.internal.Mission.MissionType.SAM then
+                        table.insert(o.db.sams, mission)
+                    else
+                        table.insert(o.db.missions, mission)
+                    end
+                end
+            end
+
+            local randomMissionNames = database:getRandomMissionsForStage(stagezone_name)
+
+            local randomMissionByName = {}
+            for _, missionZoneName in pairs(randomMissionNames) do
+                local mission = Spearhead.internal.Mission:new(missionZoneName, database, logger)
+                if mission then
+                    if randomMissionByName[mission.name] == nil then
+                        randomMissionByName[mission.name] = {}
+                    end
+                    table.insert(randomMissionByName[mission.name], mission)
+                end
+            end
+
+            for _, missions in pairs(randomMissionByName) do
+                local mission = Spearhead.Util.randomFromList(missions)
+                if mission then
+                    o.db.missionsByCode[mission.code] = mission
+                    if mission.missionType == Spearhead.internal.Mission.MissionType.SAM then
+                        table.insert(o.db.sams, mission)
+                    else
+                        table.insert(o.db.missions, mission)
+                    end
+                end
+            end
+
+            local airbaseIds = database:getAirbaseIdsInStage(o.zoneName)
+            if airbaseIds ~= nil and type(airbaseIds) == "table" then
+                o.db.airbaseIds = airbaseIds
+                for _, airbaseId in pairs(airbaseIds) do
+                    
+                    for _, groupName in pairs(database:getRedGroupsAtAirbase(airbaseId)) do 
+                        table.insert(o.db.redAirbasegroups, groupName)
+                        Spearhead.DcsUtil.DestroyGroup(groupName)
+                    end
+
+                    for _, groupName in pairs(database:getBlueGroupsAtAirbase(airbaseId)) do 
+                        table.insert(o.db.blueAirbasegroups, groupName)
+                        Spearhead.DcsUtil.DestroyGroup(groupName)
+                    end
+                end
+            end
+
+            for _, samZoneName in pairs(database:getBlueSamsInStage(o.zoneName)) do
+                for _, samGroup in pairs(database:getBlueSamGroupsInZone(samZoneName)) do
+                    table.insert(o.db.blueSamGroups, samGroup)
+                    Spearhead.DcsUtil.DestroyGroup(samGroup)
+                end
+            end
+
+            local miscGroups = database:getMiscGroupsAtStage(o.zoneName)
+            for _, groupName in pairs(miscGroups) do
+                Spearhead.DcsUtil.DestroyGroup(groupName)
+            end
+
+            local farps = database:getFarpZonesInStage(o.zoneName)
+            if farps ~= nil and type(farps) == "table" then o.db.farps = farps end
+        end
+
+        o.StageCompleteListeners = {}
+        ---comment
+        ---@param self table
+        ---@param StageCompleteListener table an Object with function onStageCompleted(stage)
+        o.AddStageCompleteListener = function(self, StageCompleteListener)
+
+            if type(StageCompleteListener) ~= "table" then
+                return
+            end
+            table.insert(self.StageCompleteListeners, StageCompleteListener)
+        end
+
+        local triggerStageCompleteListeners = function(self)
+            self.isActive = false
+            for _, callable in pairs(self.StageCompleteListeners) do
+                local succ, err = pcall( function() 
+                    callable:onStageCompleted(self)
+                end)
+                if err then
+                    self.logger:warn("Error in misstion complete listener:" .. err)
+                end
+            end
+        end
+
+        o.IsComplete = function(self)
+            for i, mission in pairs(self.db.missions) do
+                local state = mission:GetState()
+                if state == Spearhead.internal.Mission.MissionState.ACTIVE or state == Spearhead.internal.Mission.MissionState.NEW then
+                    return false
+                end
+            end
+            return true
+        end
+
+        local CheckContinuousAsync = function(self, time)
+            self.logger:info("Checking stage completion for stage: " .. self.zoneName)
+            if self.activeStage == self.stageNumber then
+                return nil -- stop looping if this stage is not even active
+            end
+
+            if self:IsComplete() == true then
+                triggerStageCompleteListeners(self)
+                return nil
+            end
+            return time + 60
+        end
+
+        ---Activates all SAMS, Airbase units etc all at once.
+        ---@param self table
+        o.PreActivate = function(self)
+            if self.preActivated == false then
+                self.preActivated = true
+                for key, mission in pairs(self.db.sams) do
+                    if mission and mission.Activate then
+                        mission:Activate()
+                    end
+                end
+                self.logger:debug("Pre-activating stage with airbase groups amount: " .. Spearhead.Util.tableLength(self.db.redAirbasegroups))
+
+                for _ , groupName in pairs(self.db.redAirbasegroups) do
+                    Spearhead.DcsUtil.SpawnGroupTemplate(groupName)
+                end
+            end
+
+            if self.activeStage == self.stageNumber then
+                for _, mission in pairs(self.db.sams) do
+                    self:AddCommmandsForMissionToAllPlayers(mission)
+                end
+            end
+        end
+
+        local activateMissionsIfApplicableAsync = function(self)
+            self:ActivateMissionsIfApplicable(self)
+        end
+
+        o.MarkStage = function(self, blue)
+            local fillColor = {1, 0, 0, 0.1}
+            local line ={ 1, 0,0, 1 }
+            if blue == true then
+                fillColor = {0, 0, 1, 0.1}
+                line ={ 0, 0,1, 1 }
+            end
+
+            local zone = Spearhead.DcsUtil.getZoneByName(self.zoneName)
+            if zone and self.stageConfig:isDrawStagesEnabled() == true then
+                self.logger:debug("drawing stage")
+                if zone.zone_type == Spearhead.DcsUtil.ZoneType.Cilinder then
+                    trigger.action.circleToAll(-1, self.stageDrawingId, {x = zone.x, y = 0 , z = zone.z}, zone.radius, {0,0,0,0}, {0,0,0,0},4, true)
+                else
+                    --trigger.action.circleToAll(-1, self.stageDrawingId, {x = zone.x, y = 0 , z = zone.z}, zone.radius, { 1, 0,0, 1 }, {1,0,0,1},4, true)
+                    trigger.action.quadToAll( -1, self.stageDrawingId,  zone.verts[1], zone.verts[2], zone.verts[3],  zone.verts[4], {0,0,0,0}, {0,0,0,0}, 4, true)
+                end
+
+                trigger.action.setMarkupColorFill(self.stageDrawingId, fillColor)
+                trigger.action.setMarkupColor(self.stageDrawingId, line)
+            end
+        end
+        
+        o.ActivateStage = function(self)
+            self.isActive = true;
+
+            pcall(function()
+                self:MarkStage()
+            end)
+
+            self:PreActivate()
+            
+            local miscGroups = self.database:getMiscGroupsAtStage(self.zoneName)
+            self.logger:debug("Activating Misc groups for zone: " .. Spearhead.Util.tableLength(miscGroups))
+            for _, groupName in pairs(miscGroups) do
+                Spearhead.DcsUtil.SpawnGroupTemplate(groupName)
+            end
+
+            for _, mission in pairs(self.db.missions) do
+                if mission.missionType == Spearhead.internal.Mission.MissionType.DEAD then
+                    mission:Activate()
+                    self:AddCommmandsForMissionToAllPlayers(mission)
+                end
+            end
+            timer.scheduleFunction(activateMissionsIfApplicableAsync, self, timer.getTime() + 5)
+
+            timer.scheduleFunction(CheckContinuousAsync, self, timer.getTime() + 60)
+        end
+
+        o.ActivateMissionsIfApplicable = function (self)
+            local activeCount = 0
+
+            local availableMissions = {}
+            for _, mission in pairs(self.db.missionsByCode) do
+                local state = mission:GetState()
+
+                if state == Spearhead.internal.Mission.MissionState.ACTIVE then
+                    activeCount = activeCount + 1
+                end
+
+                if state == Spearhead.internal.Mission.MissionState.NEW then
+                    table.insert(availableMissions, mission)
+                end
+            end
+
+            local max = self.stageConfig:getMaxMissionsPerStage() or 10
+
+            local availableMissionsCount = Spearhead.Util.tableLength(availableMissions)
+            if activeCount < max and availableMissionsCount > 0  then
+                for i = activeCount+1, max do
+                    if availableMissionsCount == 0 then
+                        i = max+1 --exits this loop
+                    else
+                        local index = math.random(1, availableMissionsCount)
+                        local mission = table.remove(availableMissions, index)
+                        if mission then
+                            mission:Activate()
+                            self:AddCommmandsForMissionToAllPlayers(mission)
+                            activeCount = activeCount + 1;
+                        end
+                        availableMissionsCount = availableMissionsCount - 1
+                    end
+                end
+            end
+
+        end
+
+        ---Cleans up all missions
+        ---@param self table
+        o.Clean = function(self)
+            for key, mission in pairs(self.db.missions) do
+                mission:Cleanup()
+            end
+
+            for key, samMission in pairs(self.db.sams) do
+                samMission:Cleanup()
+            end
+
+            for _, airbase in pairs(self.db.airbases) do
+                for _, redGroupName in pairs(airbase.redAirbaseGroupNames) do
+                    Spearhead.DcsUtil.DcsUtil.DestroyGroup(redGroupName)
+                end
+            end
+
+            logger:debug("'" .. Spearhead.Util.toString(self.zoneName) .. "' cleaned")
+        end
+
+        local ActivateBlueAsync = function(self)
+            pcall(function()
+                self:MarkStage(true)
+            end)
+
+            for _, blueSamGroupName in pairs(self.db.blueSamGroups) do
+                Spearhead.DcsUtil.SpawnGroupTemplate(blueSamGroupName)
+            end
+
+            for key, airbaseId in pairs(self.db.airbaseIds) do
+                local airbase = Spearhead.DcsUtil.getAirbaseById(airbaseId)
+
+                if airbase then
+                    local startingCoalition = Spearhead.DcsUtil.getStartingCoalition(airbaseId)
+                    if startingCoalition == coalition.side.BLUE then
+                        airbase:setCoalition(2)
+                        for _, blueGroupName in pairs(self.db.blueAirbasegroups) do
+                            Spearhead.DcsUtil.SpawnGroupTemplate(blueGroupName)
+                        end
+                    else
+                        airbase:setCoalition(0)
+                    end
+                end
+            end
+            return nil
+        end
+
+        ---Sets airfields to blue and spawns friendly farps
+        o.ActivateBlueStage = function(self)
+            logger:debug("Setting stage '" .. Spearhead.Util.toString(self.zoneName) .. "' to blue")
+            
+            for _, groupName in pairs(self.db.redAirbasegroups) do
+                Spearhead.DcsUtil.DestroyGroup(groupName)
+            end
+
+            for _, mission in pairs(self.db.missions) do
+                mission:Cleanup()
+            end
+
+            for _, mission in pairs(self.db.sams) do
+                mission:Cleanup()
+            end
+
+            timer.scheduleFunction(ActivateBlueAsync, self, timer.getTime() + 3)
+
+        end
+
+        o.OnStatusRequestReceived = function(self, groupId)
+            if self.activeStage ~= self.stageNumber then
+                return
+            end
+
+            trigger.action.outTextForGroup(groupId, "Status Update incoming... ", 3)
+
+            local text = "Mission Status: \n"
+
+            local  totalmissions = 0
+            local completedMissions = 0
+            for _, mission in pairs(self.db.missionsByCode) do
+                totalmissions = totalmissions + 1
+                if mission.missionState == Spearhead.internal.Mission.MissionState.ACTIVE then
+
+                    text = text .. "\n [" .. mission.code .. "] " .. mission.name .. 
+                    " ("  ..  mission.missionTypeDisplayName .. ") \n"
+                end
+               
+                if mission.missionState == Spearhead.internal.Mission.MissionState.COMPLETED then
+                    completedMissions = completedMissions + 1
+                end
+            end
+
+            local completionPercentage = math.floor((completedMissions / totalmissions) * 100)
+            text = text .. " \n Missions Complete: " .. completionPercentage .. "%" 
+
+            self.logger:debug(text)
+            trigger.action.outTextForGroup(groupId, text, 20)
+        end
+
+        o.OnStageNumberChanged = function (self, number)
+
+            if self.activeStage == number then --only activate once for a stage
+                return
+            end
+
+            local previousActive = self.activeStage
+            self.activeStage = number
+            if Spearhead.capInfo.IsCapActiveWhenZoneIsActive(self.zoneName, number) == true then
+                self:PreActivate()
+            end
+
+            if number == self.stageNumber then
+                self:ActivateStage()
+            end
+
+            if previousActive <= self.stageNumber then
+                if number > self.stageNumber then
+                    self:ActivateBlueStage()
+                    self:RemoveAllMissionCommands()
+                end
+            end
+        end
+
+        --- input = { self, groupId, missionCode }
+        local ShowBriefingClicked = function (input)
+            
+            local self = input.self
+            local groupId = input.groupId
+            local missionCode = input.missionCode
+
+            local mission  = self.db.missionsByCode[missionCode]
+            if mission then
+                mission:ShowBriefing(groupId)
+            end
+        end
+        
+        o.RemoveMissionCommands = function (self, mission)
+
+            self.logger:debug("Removing commands for: " .. mission.name)
+
+            local folderName = mission.name .. "(" .. mission.missionTypeDisplayName .. ")"
+            for i = 0, 2 do
+                local players = coalition.getPlayers(i)
+                for _, playerUnit in pairs(players) do
+                    local groupId = playerUnit:getGroup():getID()
+                    missionCommands.removeItemForGroup(groupId, { "Missions", folderName })
+                end
+            end
+        end
+
+        o.RemoveAllMissionCommands = function (self)
+            for _, mission in pairs(self.db.missionsByCode) do
+                self:RemoveMissionCommands(mission)
+            end
+        end
+
+        o.AddCommandsForMissionToGroup = function (self, groupId, mission)
+            local folderName = mission.name .. "(" .. mission.missionTypeDisplayName .. ")"
+            missionCommands.addSubMenuForGroup(groupId, folderName, { "Missions"} )
+            missionCommands.addCommandForGroup(groupId, "Show Briefing", { "Missions", folderName }, ShowBriefingClicked, { self = self, groupId = groupId, missionCode = mission.code })
+        end
+
+        o.AddCommmandsForMissionToAllPlayers = function(self, mission)
+            for i = 0, 2 do
+                local players = coalition.getPlayers(i)
+                for _, playerUnit in pairs(players) do
+                    local groupId = playerUnit:getGroup():getID()
+                    self:AddCommandsForMissionToGroup(groupId, mission)
+                end
+            end
+        end
+        
+        o.OnPlayerEntersUnit = function (self, unit)
+            if self.activeStage == self.stageNumber then
+                local groupId = unit:getGroup():getID()
+                for _, mission in pairs(self.db.missionsByCode) do
+                    if mission.missionState == Spearhead.internal.Mission.MissionState.ACTIVE then
+                        self:AddCommandsForMissionToGroup(groupId, mission)
+                    end
+                end
+            end
+        end
+
+        local removeMissionCommandsDelayed = function(input)
+            local self = input.self
+            local mission = input.mission
+            self:RemoveMissionCommands(mission)
+        end
+        
+        o.OnMissionComplete = function(self, mission)
+            timer.scheduleFunction(removeMissionCommandsDelayed, { self = self, mission = mission}, timer.getTime() + 20)
+
+            if(self:IsComplete()) then
+                timer.scheduleFunction(triggerStageCompleteListeners, self, timer.getTime() + 15)
+            else
+                timer.scheduleFunction(activateMissionsIfApplicableAsync, self, timer.getTime() + 10)
+            end
+        end
+
+        for _, mission in pairs(o.db.missionsByCode) do
+            mission:AddMissionCompleteListener(o)
+        end
+
+        Spearhead.Events.AddOnPlayerEnterUnitListener(o)
+        Spearhead.Events.AddOnStatusRequestReceivedListener(o)
+        Spearhead.Events.AddStageNumberChangedListener(o)
+        return o
+    end
+end
+
+if not Spearhead.internal then Spearhead.internal = {} end
+Spearhead.internal.Stage = Stage
+end --Stage.lua
+do --GlobalStageManager.lua
+
+
+local StagesByName = {}
+local StagesByIndex = {}
+
+
+GlobalStageManager = {}
+function GlobalStageManager:NewAndStart(database, stageConfig)
+    local logger = Spearhead.LoggerTemplate:new("StageManager", stageConfig.logLevel)
+    local o = {}
+    setmetatable(o, { __index = self })
+
+    o.logger = logger
+
+    o.onStageCompleted = function(self, stage) 
+        local stageNumber = tostring(stage.stageNumber)
+        local anyActive = false
+        for _, stage in pairs(StagesByIndex[stageNumber] or {}) do
+            if stage.isActive then anyActive = true end
+        end
+
+        if anyActive == false and stageConfig:isAutoStages() == true then
+            Spearhead.Events.PublishStageNumberChanged(tonumber(stageNumber) + 1)
+        end
+
+    end
+
+    for _, stageName in pairs(database:getStagezoneNames()) do
+
+        local stagelogger = Spearhead.LoggerTemplate:new(stageName, stageConfig.logLevel)
+        local stage = Spearhead.internal.Stage:new(stageName, database, stagelogger, stageConfig)
+
+        if stage then
+            stage:AddStageCompleteListener(o);
+            StagesByName[stageName]  = stage
+            local indexString = tostring(stage.stageNumber)
+            if StagesByIndex[indexString] == nil then StagesByIndex[indexString] = {} end
+            table.insert(StagesByIndex[indexString], stage)
+            logger:info("Initiated " .. Spearhead.Util.tableLength(StagesByName) .. " airbases for cap")
+        end
+    end
+
+    return o
+end
+
+if not Spearhead.internal then Spearhead.internal = {} end
+Spearhead.internal.GlobalStageManager = GlobalStageManager
+
+end --GlobalStageManager.lua
 
 --Single player purpose
 
@@ -4341,7 +4404,7 @@ local SetStageDelayed = function(number, time)
     return nil
 end
 
-timer.scheduleFunction(SetStageDelayed, 1, timer.getTime() + 3)
+timer.scheduleFunction(SetStageDelayed, 2, timer.getTime() + 3)
 
 Spearhead.LoadingDone()
 --Check lines of code in directory per file: 
