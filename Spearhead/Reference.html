@@ -93,7 +93,7 @@ class MarkdownStyle extends HTMLElement {
 customElements.define('markdown-style', MarkdownStyle);</script><markdown-style style="max-width: 960px; margin: 0 auto 60px auto; padding: 8px;max-width: 960px;" class="markdown-style" mode="dark">
     <h1 id="spearhead-reference"><a class="anchor" aria-hidden="true" tabindex="-1" href="#spearhead-reference"><span class="octicon octicon-link"></span></a>Spearhead Reference</h1>
     <blockquote>
-      <p><strong><em>Spearhead last updated at:</em></strong> 2024-12-11T19:01:19.140852</p>
+      <p><strong><em>Spearhead last updated at:</em></strong> 2024-12-11T20:16:20.065566</p>
     </blockquote>
     <h2 id="for-the-story-tellers"><a class="anchor" aria-hidden="true" tabindex="-1" href="#for-the-story-tellers"><span class="octicon octicon-link"></span></a>For the Story tellers</h2>
     <p>Spearhead. A framework created for the mission maker.<br>For those who do want to create a mission with a story and progress, but do not want to get into scripting. Creating an engaging mission can be an incredible feat. First think of the mission, the submission, the placement, the time. Once the concept is done you'll need to place all the objects into the editor. Not too many, but also not too little. Then comes the scripts to make it feel engaging and organic. The latter is probably the biggest hurdle.</p>
@@ -234,11 +234,14 @@ customElements.define('markdown-style', MarkdownStyle);</script><markdown-style 
 </span><span class="code-line line-number" line="50">        autoStages <span class="token operator">=</span> <span class="token keyword">true</span><span class="token punctuation">,</span> <span class="token comment">--default true</span>
 </span><span class="code-line line-number" line="51">
 </span><span class="code-line line-number" line="52">        <span class="token comment">--Maximum missions per stage (includes all types of missions)</span>
-</span><span class="code-line line-number" line="53">        maxMissionStage <span class="token operator">=</span> <span class="token number">10</span>
-</span><span class="code-line line-number" line="54">    <span class="token punctuation">}</span>
-</span><span class="code-line line-number" line="55"><span class="token punctuation">}</span>
-</span><span class="code-line line-number" line="56">
-</span><span class="code-line line-number" line="57">
+</span><span class="code-line line-number" line="53">        maxMissionStage <span class="token operator">=</span> <span class="token number">10</span><span class="token punctuation">,</span>
+</span><span class="code-line line-number" line="54">
+</span><span class="code-line line-number" line="55">        <span class="token comment">--Stage starting number</span>
+</span><span class="code-line line-number" line="56">        startingStage <span class="token operator">=</span> <span class="token number">1</span>
+</span><span class="code-line line-number" line="57">    <span class="token punctuation">}</span>
+</span><span class="code-line line-number" line="58"><span class="token punctuation">}</span>
+</span><span class="code-line line-number" line="59">
+</span><span class="code-line line-number" line="60">
 </span></code><div onclick="copied(this)" data-code="  
 SpearheadConfig = {
 
@@ -291,7 +294,10 @@ SpearheadConfig = {
         autoStages = true, --default true
 
         --Maximum missions per stage (includes all types of missions)
-        maxMissionStage = 10
+        maxMissionStage = 10,
+
+        --Stage starting number
+        startingStage = 1
     }
 }
 
