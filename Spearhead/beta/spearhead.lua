@@ -1,5 +1,5 @@
 --[[
-        Spearhead Compile Time: 2024-12-11T19:01:40.640175
+        Spearhead Compile Time: 2024-12-11T20:17:28.126306
     ]]
 do --spearhead_events.lua
 
@@ -3189,6 +3189,9 @@ function StageConfig:new()
 
     o.logLevel  = Spearhead.LoggerTemplate.LogLevelOptions.INFO
 
+    local startingStage = SpearheadConfig.StageConfig.startingStage or 1
+    o.getStartingStage = function(self) return startingStage end
+
     o.toString = function()
         return Spearhead.Util.toString({
             maxMissionsPerStage = maxMissionsPerStage,
@@ -4404,7 +4407,9 @@ local SetStageDelayed = function(number, time)
     return nil
 end
 
-timer.scheduleFunction(SetStageDelayed, 2, timer.getTime() + 3)
+local startingStage = stageConfig:getStartingStage() or 1
+
+timer.scheduleFunction(SetStageDelayed, startingStage, timer.getTime() + 3)
 
 Spearhead.LoadingDone()
 --Check lines of code in directory per file: 
