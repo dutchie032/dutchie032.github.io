@@ -91,266 +91,52 @@ class MarkdownStyle extends HTMLElement {
     }
 }
 customElements.define('markdown-style', MarkdownStyle);</script><markdown-style style="max-width: 960px; margin: 0 auto 60px auto; padding: 8px;max-width: 960px;" class="markdown-style" mode="dark">
-    <h1 id="spearhead-reference"><a class="anchor" aria-hidden="true" tabindex="-1" href="#spearhead-reference"><span class="octicon octicon-link"></span></a>Spearhead Reference</h1>
-    <blockquote>
-      <p><strong><em>Spearhead last updated at:</em></strong> 2024-12-14T18:27:51.716973</p>
-    </blockquote>
-    <h2 id="for-the-story-tellers"><a class="anchor" aria-hidden="true" tabindex="-1" href="#for-the-story-tellers"><span class="octicon octicon-link"></span></a>For the Story tellers</h2>
-    <p>Spearhead. A framework created for the mission maker.<br>For those who do want to create a mission with a story and progress, but do not want to get into scripting. Creating an engaging mission can be an incredible feat. First think of the mission, the submission, the placement, the time. Once the concept is done you'll need to place all the objects into the editor. Not too many, but also not too little. Then comes the scripts to make it feel engaging and organic. The latter is probably the biggest hurdle.</p>
-    <p>
-      Spearhead is created to try and make this entire process a lot easier.
-      It keeps track of completed missions, moves the stages forward once all mission are complete.<br>Manages CAP in an easy to setup way (no scripting required) and gives a lot of possibilities to the mission maker.<br>The goal is for the mission maker to focus on the story and the detailed missions, without having to worry about all the triggers and mission management the scripts normally take care off.
-    </p>
-    <h2 id="get-started"><a class="anchor" aria-hidden="true" tabindex="-1" href="#get-started"><span class="octicon octicon-link"></span></a>Get Started</h2>
-    <p>This page will give you a detailed overview of all options, moving parts and logic that goes into Spearhead.<br>If you however want to go right to the Get Started guide click here: <a href="./GetStarted.html#completion">here</a><br>You can always come back later here.<br>The Get Started guide will not show all details and reasoning.<br></p>
-    <h2 id="configuration"><a class="anchor" aria-hidden="true" tabindex="-1" href="#configuration"><span class="octicon octicon-link"></span></a>Configuration</h2>
-    <p>Spearhead will always try to be as configurable as possible.<br>Underneath you can see all configuration values. Be aware there are nested tables.<br>The values are the default values in case no configuration was found.<br>You can also choose to programatically overwrite only the parts that you want, but be aware of <code>nil</code> references and order of files.</p>
-    <p>Overwrite the values in your own script (before spearhead runs) or <a download="spearheadConfig.lua" href="./spearheadConfig.lua" target="_blank" rel="noopener noreferrer">Download Config File</a> to edit</p>
-    <pre class="language-lua"><code class="language-lua code-highlight"><span class="code-line line-number" line="1">  
-</span><span class="code-line line-number" line="2">SpearheadConfig <span class="token operator">=</span> <span class="token punctuation">{</span>
-</span><span class="code-line line-number" line="3">
-</span><span class="code-line line-number" line="4">    CapConfig <span class="token operator">=</span> <span class="token punctuation">{</span>
-</span><span class="code-line line-number" line="5">        <span class="token comment">--quickly enable of disable the entire CAP Logic </span>
-</span><span class="code-line line-number" line="6">        <span class="token comment">--(you can also just rename all units to not be named "CAP_")</span>
-</span><span class="code-line line-number" line="7">        enabled <span class="token operator">=</span> <span class="token keyword">true</span><span class="token punctuation">,</span> <span class="token comment">-- default true</span>
-</span><span class="code-line line-number" line="8">        
-</span><span class="code-line line-number" line="9">        <span class="token comment">--min ground speed for CAP aircraft during patrol</span>
-</span><span class="code-line line-number" line="10">        <span class="token comment">-- unit: knots</span>
-</span><span class="code-line line-number" line="11">        minSpeed <span class="token operator">=</span> <span class="token number">400</span><span class="token punctuation">,</span> <span class="token comment">-- default 400</span>
-</span><span class="code-line line-number" line="12">
-</span><span class="code-line line-number" line="13">        <span class="token comment">--max speed for CAP aircraft during patrol</span>
-</span><span class="code-line line-number" line="14">        <span class="token comment">-- unit: knots</span>
-</span><span class="code-line line-number" line="15">        maxSpeed <span class="token operator">=</span> <span class="token number">500</span><span class="token punctuation">,</span> <span class="token comment">-- default 500</span>
-</span><span class="code-line line-number" line="16">
-</span><span class="code-line line-number" line="17">        <span class="token comment">--minAlt for aircraft on patrol</span>
-</span><span class="code-line line-number" line="18">        <span class="token comment">-- unit: feet</span>
-</span><span class="code-line line-number" line="19">        minAlt <span class="token operator">=</span> <span class="token number">18000</span><span class="token punctuation">,</span> <span class="token comment">-- default 18000</span>
-</span><span class="code-line line-number" line="20">
-</span><span class="code-line line-number" line="21">        <span class="token comment">--maxAlt for aircraft on patrol</span>
-</span><span class="code-line line-number" line="22">        <span class="token comment">-- unit: feet</span>
-</span><span class="code-line line-number" line="23">        maxAlt <span class="token operator">=</span> <span class="token number">28000</span><span class="token punctuation">,</span> <span class="token comment">-- default 28000</span>
-</span><span class="code-line line-number" line="24">
-</span><span class="code-line line-number" line="25">        <span class="token comment">--Delay for aircraft from touchdown to off the chocks.</span>
-</span><span class="code-line line-number" line="26">        <span class="token comment">-- unit: seconds</span>
-</span><span class="code-line line-number" line="27">        rearmDelay <span class="token operator">=</span> <span class="token number">600</span><span class="token punctuation">,</span> <span class="token comment">-- default 600</span>
-</span><span class="code-line line-number" line="28">
-</span><span class="code-line line-number" line="29">        <span class="token comment">--Delay for aircraft from death to takeoff.</span>
-</span><span class="code-line line-number" line="30">        <span class="token comment">--When the seconds remaining is the same at the rearmDelay it will be spawned on the ramp and follow the rearm logic.</span>
-</span><span class="code-line line-number" line="31">        <span class="token comment">-- !! Can not be lower than rearmDelay</span>
-</span><span class="code-line line-number" line="32">        <span class="token comment">-- unit: seconds</span>
-</span><span class="code-line line-number" line="33">        deathDelay <span class="token operator">=</span> <span class="token number">1800</span><span class="token punctuation">,</span> <span class="token comment">-- default 1800</span>
-</span><span class="code-line line-number" line="34">    <span class="token punctuation">}</span><span class="token punctuation">,</span>
-</span><span class="code-line line-number" line="35">
-</span><span class="code-line line-number" line="36">    StageConfig <span class="token operator">=</span> <span class="token punctuation">{</span>
-</span><span class="code-line line-number" line="37">        
-</span><span class="code-line line-number" line="38">        <span class="token comment">-- management of stages and its missions. </span>
-</span><span class="code-line line-number" line="39">        <span class="token comment">-- This is not related to CAP managers which will continue to work even if stage management is disabled</span>
-</span><span class="code-line line-number" line="40">        enabled <span class="token operator">=</span> <span class="token keyword">true</span><span class="token punctuation">,</span> <span class="token comment">-- default true</span>
-</span><span class="code-line line-number" line="41">
-</span><span class="code-line line-number" line="42">        <span class="token comment">--Will draw the active and the next stage </span>
-</span><span class="code-line line-number" line="43">        drawStages <span class="token operator">=</span> <span class="token keyword">false</span><span class="token punctuation">,</span> <span class="token comment">-- default true</span>
-</span><span class="code-line line-number" line="44">
-</span><span class="code-line line-number" line="45">        <span class="token comment">--AutoStages will continue to the next stage automatically on completion of the missions within the stage. </span>
-</span><span class="code-line line-number" line="46">        <span class="token comment">-- If you want to make it so the next stage triggers only when you want to disable it here and manually implement the actions needed.</span>
-</span><span class="code-line line-number" line="47">        <span class="token comment">--[[
-</span></span><span class="code-line line-number" line="48"><span class="token comment">            TODO: Add manual stage transition documentation
-</span></span><span class="code-line line-number" line="49"><span class="token comment">        ]]</span>
-</span><span class="code-line line-number" line="50">        autoStages <span class="token operator">=</span> <span class="token keyword">true</span><span class="token punctuation">,</span> <span class="token comment">--default true</span>
-</span><span class="code-line line-number" line="51">
-</span><span class="code-line line-number" line="52">        <span class="token comment">--Maximum missions per stage (includes all types of missions)</span>
-</span><span class="code-line line-number" line="53">        maxMissionStage <span class="token operator">=</span> <span class="token number">10</span><span class="token punctuation">,</span>
-</span><span class="code-line line-number" line="54">
-</span><span class="code-line line-number" line="55">        <span class="token comment">--Stage starting number</span>
-</span><span class="code-line line-number" line="56">        startingStage <span class="token operator">=</span> <span class="token number">1</span>
-</span><span class="code-line line-number" line="57">    <span class="token punctuation">}</span>
-</span><span class="code-line line-number" line="58"><span class="token punctuation">}</span>
-</span><span class="code-line line-number" line="59">
-</span><span class="code-line line-number" line="60">
-</span></code><div onclick="copied(this)" data-code="  
-SpearheadConfig = {
-
-    CapConfig = {
-        --quickly enable of disable the entire CAP Logic 
-        --(you can also just rename all units to not be named &#x22;CAP_&#x22;)
-        enabled = true, -- default true
-        
-        --min ground speed for CAP aircraft during patrol
-        -- unit: knots
-        minSpeed = 400, -- default 400
-
-        --max speed for CAP aircraft during patrol
-        -- unit: knots
-        maxSpeed = 500, -- default 500
-
-        --minAlt for aircraft on patrol
-        -- unit: feet
-        minAlt = 18000, -- default 18000
-
-        --maxAlt for aircraft on patrol
-        -- unit: feet
-        maxAlt = 28000, -- default 28000
-
-        --Delay for aircraft from touchdown to off the chocks.
-        -- unit: seconds
-        rearmDelay = 600, -- default 600
-
-        --Delay for aircraft from death to takeoff.
-        --When the seconds remaining is the same at the rearmDelay it will be spawned on the ramp and follow the rearm logic.
-        -- !! Can not be lower than rearmDelay
-        -- unit: seconds
-        deathDelay = 1800, -- default 1800
-    },
-
-    StageConfig = {
-        
-        -- management of stages and its missions. 
-        -- This is not related to CAP managers which will continue to work even if stage management is disabled
-        enabled = true, -- default true
-
-        --Will draw the active and the next stage 
-        drawStages = false, -- default true
-
-        --AutoStages will continue to the next stage automatically on completion of the missions within the stage. 
-        -- If you want to make it so the next stage triggers only when you want to disable it here and manually implement the actions needed.
-        --[[
-            TODO: Add manual stage transition documentation
-        ]]
-        autoStages = true, --default true
-
-        --Maximum missions per stage (includes all types of missions)
-        maxMissionStage = 10,
-
-        --Stage starting number
-        startingStage = 1
-    }
-}
-
-
-" class="copied"><svg class="octicon-copy" aria-hidden="true" viewBox="0 0 16 16" fill="currentColor" height="12" width="12"><path fill-rule="evenodd" d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z"></path><path fill-rule="evenodd" d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z"></path></svg><svg class="octicon-check" aria-hidden="true" viewBox="0 0 16 16" fill="currentColor" height="12" width="12"><path fill-rule="evenodd" d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"></path></svg></div></pre>
-    <h2 id="the-spearhead-api"><a class="anchor" aria-hidden="true" tabindex="-1" href="#the-spearhead-api"><span class="octicon octicon-link"></span></a>The Spearhead API</h2>
-    <p>You can not only use Spearhead, but you can also interact with it via your own scripts.</p>
-    <p>See all the reference, explanation here: <a href="./SpearheadApi.html">SpearheadAPI</a></p>
-    <h2 id="all-trigger-zone-name-options"><a class="anchor" aria-hidden="true" tabindex="-1" href="#all-trigger-zone-name-options"><span class="octicon octicon-link"></span></a>All Trigger zone name options:</h2>
-    <details>
-      <summary>MISSIONSTAGE_</summary>A mission stage that encapsulates multiple missions, airbases and other objects.
-    </details>
-    <details>
-      <summary>MISSION_</summary>
-    </details>
-    <details>
-      <summary>BLUESAM_</summary>
-    </details>
-    <details>
-      <summary>CAPROUTE_</summary>
-    </details>
-    <details>
-      <summary>CAPZONE_</summary>
-    </details>
-    <h2 id="stage"><a class="anchor" aria-hidden="true" tabindex="-1" href="#stage"><span class="octicon octicon-link"></span></a>Stage</h2>
-    <p>A stage is a logical part of a mission. It's isn't anything special per se, but everything revolves around stages in Spearhead.<br>Everything is tied to at a stage.<br></p>
-    <h2 id="mission"><a class="anchor" aria-hidden="true" tabindex="-1" href="#mission"><span class="octicon octicon-link"></span></a>Mission</h2>
-    <p>A mission is a completable objective with a state and a continuous check to see if itself is completed.<br>The delay between checks is quite big, but it also is checked on unit deaths and other events.</p>
-    <h3 id="placement"><a class="anchor" aria-hidden="true" tabindex="-1" href="#placement"><span class="octicon octicon-link"></span></a>Placement</h3>
-    <p>The placement of MISSION trigger zones can be anywhere.<br>The order of unit detection is <code>CAP</code> > <code>MISSION</code> > <code>AIRBASE</code> > <code>STAGE</code><br>This means that if a unit has a name that starts with <code>"CAP_"</code> it will not be included in a mission.<br>But all other units in a <code>MISSION</code> trigger zone will be managed as part of that mission.</p>
-    <p>Units inside a <code>MISSION</code> do not have to stay within the triggerzone.<br>They just need to be inside the zone at the start of the mission.<br>You can for example let a <code>BAI</code> mission drive back and forth between airbases. The <code>MISSIONZONE</code> only needs to be around the units that are part of the objective, not the waypoints.</p>
-    <h3 id="naming"><a class="anchor" aria-hidden="true" tabindex="-1" href="#naming"><span class="octicon octicon-link"></span></a>Naming</h3>
-    <p><code>MISSION_&#x3C;type>_&#x3C;name></code><br><code>RANDOMMISSION_&#x3C;type>_&#x3C;name>_&#x3C;index></code> (Read RANDOMISATION below)</p>
-    <p>With:<br><code>name</code> = A name that is easy to remember and type. Like a codename. Exmaples: BYRON, PLUKE, etc.<br><code>type</code> = any of the below described types. Special types are marked with an *</p>
-    <p>TIP: You can click on the type to get more details</p>
-    <details>
-      <summary>SAM*</summary>  SAM Sites are managed a little different. SAM Sites can be used to guide players and to protect airfields.<br>  In the future when deepstrike missions might come into scope these SAM sites will also be more important.<br>  SAM sites will be activated when a zone is "Pre-Active".<br>  A stage is "Pre-Active" when there is a CAP base active, or there is other things to do that would need the SAM site to be live (OCA, DEEPSTRIKE, EXTRACTION \&#x3C;= all feature development)<br>  If you want a SAM site to become active ONLY when the stage is fully active, then `DEAD` is the type for you!
-      <p>  <u>Completion logic</u><br>  TODO: documentation: Completion logic</p>
-    </details>
-    <details>
-      <summary>DEAD</summary>
-      <p>  DEAD missions will be spawned on activation of the stage.<br>  ALL DEAD missions will be activated right at the start of a stage.<br>  This might be against the "randomisation" feel, but it is to make sure mission don't get activated randomly and players get ambushed by a random spawn.<br></p>
-      <p>  <u>Completion logic</u><br>  TODO: documentation: Completion logic</p>
-    </details>
-    <details>
-      <summary>BAI</summary>
-    </details>
-    <details>
-      <summary>STRIKE</summary>  STRIKE missions will be activated randomly until all of them are completed.<br>  A strike mission can be placed anywhere, even on airbases
-      <p>  <u>Completion logic</u><br>  TODO: documentation: Completion logic</p>
-    </details>
-    <h3 id="tgt-targets"><a class="anchor" aria-hidden="true" tabindex="-1" href="#tgt-targets"><span class="octicon octicon-link"></span></a>TGT targets</h3>
-    <p>There is 2 ways a mission can complete which depends on the precense</p>
-    <h3 id="randomisation"><a class="anchor" aria-hidden="true" tabindex="-1" href="#randomisation"><span class="octicon octicon-link"></span></a>Randomisation</h3>
-    <p>You can randomize missions.<br>Spearhead will pick up all mission zones that start with <code>"RANDOMMISSION_"</code><br>Then it will combine each <code>RANDOMMISSION</code> in a zone with the same <code>&#x3C;name></code> and pick a random one.<br>It will always pick 1 and only 1.</p>
-    <p>This means you have some options for randomisation.<br>For example, if you have 1 missionzone with name <code>RANDOMMISSION_SAM_PLUKE_1</code> that is filled with an SA-2 and another zone with <code>RANDOMMISSION_SAM_PLUKE_2</code> filled with an SA-3 then some runs of the mission it will spawn an SA-3 and sometimes spawn an SA-3. (works for any mission type)</p>
-    <p>
-      What you can also do is add empty <code>RANDOMMISSION_</code> zones next to the filled <code>RANDOMMISSION_</code> zone.
-      For example. You have a <code>RANDOMMISSION_DEAD_BYRON_1</code> filled with an SA-19 driving around and 2 more <code>RANDOMMISSION_DEAD_BYRON_&#x3C;2 &#x26; 3></code> zones then it will have a 33% chance of being spawned.
-      If a zone is empty it will not be briefed, activated or count towards completion of the <code>STAGE</code>
-    </p>
-    <h3 id="cap"><a class="anchor" aria-hidden="true" tabindex="-1" href="#cap"><span class="octicon octicon-link"></span></a>CAP</h3>
-    <h4 id="cap-config"><a class="anchor" aria-hidden="true" tabindex="-1" href="#cap-config"><span class="octicon octicon-link"></span></a>CAP Config:</h4>
-    <p>
-      --[[
-      TODO: CAP CONFIG
-      ]]
-    </p>
-    <p>Naming: CAP_&#x3C;"A" | B">&#x3C;Config>_&#x3C;Free form name></p>
-    <h5 id="cap-group-config"><a class="anchor" aria-hidden="true" tabindex="-1" href="#cap-group-config"><span class="octicon octicon-link"></span></a>CAP Group Config:</h5>
-    <pre><code class="code-highlight"><span class="code-line line-number" line="1">1 at x:               [&#x3C;activeStage>]&#x3C;capStage>
-</span><span class="code-line line-number" line="2">n and n  at x:        [&#x3C;activeStage>,&#x3C;activeStage>]&#x3C;capStage>
-</span><span class="code-line line-number" line="3">n till n at x:        [&#x3C;activeStage>-&#x3C;activeStage>]&#x3C;capStage>
-</span><span class="code-line line-number" line="4">n till n and n at x:  [&#x3C;activeStage>-&#x3C;activeStage>,&#x3C;activeStage>]&#x3C;capStage>
-</span><span class="code-line line-number" line="5">n till n at Active:   [&#x3C;activeStage>-&#x3C;activeStage>]A
-</span><span class="code-line line-number" line="6">
-</span><span class="code-line line-number" line="7">divider: |
+    <h1 id="spearheadapi"><a class="anchor" aria-hidden="true" tabindex="-1" href="#spearheadapi"><span class="octicon octicon-link"></span></a>Spearhead.API</h1>
+    <p>the <code>Spearhead.API</code> space is specifically created to make sure mission makers can interact with the framework.</p>
+    <p>Simply alter logic, get the current state in Spearhead, and give the whole ME more control.</p>
+    <p>eg. Late activate the entire framework by calling <code>Spearhead.API.Stages.changeStage(1)</code> later or on demand and setting the starting config stage to -1 in the Spearhead configuration file</p>
+    <h2 id="stages"><a class="anchor" aria-hidden="true" tabindex="-1" href="#stages"><span class="octicon octicon-link"></span></a>Stages</h2>
+    <pre class="language-lua"><code class="language-lua code-highlight"><span class="code-line line-number" line="1">
+</span><span class="code-line line-number" line="2"><span class="token comment">---Changes the active stage of spearhead.</span>
+</span><span class="code-line line-number" line="3"><span class="token comment">--- All other stages will change based on the normal logic. (CAP, BLUE etc.)</span>
+</span><span class="code-line line-number" line="4"><span class="token comment">--- @param stageNumber number the stage number you want changed</span>
+</span><span class="code-line line-number" line="5"><span class="token comment">--- @return boolean success indicator of success</span>
+</span><span class="code-line line-number" line="6"><span class="token comment">--- @return string message error message</span>
+</span><span class="code-line line-number" line="7">Spearhead<span class="token punctuation">.</span>API<span class="token punctuation">.</span>Stages<span class="token punctuation">.</span>changeStage <span class="token operator">=</span> <span class="token keyword">function</span><span class="token punctuation">(</span>stageNumber<span class="token punctuation">)</span> 
 </span><span class="code-line line-number" line="8">
-</span><span class="code-line line-number" line="9">examples:
-</span><span class="code-line line-number" line="10">
-</span><span class="code-line line-number" line="11">CAP_A[1-4,6]7|[5,7]8_SomeName => Will fly CAP at stage 7 when stages 1 through 4 and 6 are active and will fly CAP at 8 when 5 and 7 are active
-</span><span class="code-line line-number" line="12">CAP_A[2-5]5|[6]6_SomeName => Will fly CAP at stage 5 when stages 2 through 5 active and will fly CAP at 6 when 6 is active
-</span><span class="code-line line-number" line="13">CAP_A[1-5]A|[6]7_SomeName => Will fly CAP at the ACTIVE stage if Stages 1-5 are active. Basically following the active stages. Then when 6 is active it will fly in 7
+</span><span class="code-line line-number" line="9"><span class="token comment">---Returns the current stange number</span>
+</span><span class="code-line line-number" line="10"><span class="token comment">---Returns nil when the stagenumber was not set before ever, which means Spearhead was not started.</span>
+</span><span class="code-line line-number" line="11"><span class="token comment">---@return number | nil</span>
+</span><span class="code-line line-number" line="12">Spearhead<span class="token punctuation">.</span>API<span class="token punctuation">.</span>Stages<span class="token punctuation">.</span>getCurrentStage <span class="token operator">=</span> <span class="token keyword">function</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+</span><span class="code-line line-number" line="13">
 </span><span class="code-line line-number" line="14">
-</span><span class="code-line line-number" line="15">CAP_B[1-5]A|[6]7_SomeName => Will fly BACKUP CAP for the active zones 1 through 5 and back up for 7 when 6 is active.
-</span><span class="code-line line-number" line="16">
-</span></code><div onclick="copied(this)" data-code="1 at x:               [<activeStage>]<capStage>
-n and n  at x:        [<activeStage>,<activeStage>]<capStage>
-n till n at x:        [<activeStage>-<activeStage>]<capStage>
-n till n and n at x:  [<activeStage>-<activeStage>,<activeStage>]<capStage>
-n till n at Active:   [<activeStage>-<activeStage>]A
+</span><span class="code-line line-number" line="15"><span class="token comment">---returns whether a stage (by index) is complete. </span>
+</span><span class="code-line line-number" line="16"><span class="token comment">---@param stageNumber number</span>
+</span><span class="code-line line-number" line="17"><span class="token comment">---@return boolean | nil</span>
+</span><span class="code-line line-number" line="18"><span class="token comment">---@return string </span>
+</span><span class="code-line line-number" line="19">Spearhead<span class="token punctuation">.</span>API<span class="token punctuation">.</span>Stages<span class="token punctuation">.</span>isStageComplete <span class="token operator">=</span> <span class="token keyword">function</span><span class="token punctuation">(</span>stageNumber<span class="token punctuation">)</span>
+</span><span class="code-line line-number" line="20">
+</span></code><div onclick="copied(this)" data-code="
+---Changes the active stage of spearhead.
+--- All other stages will change based on the normal logic. (CAP, BLUE etc.)
+--- @param stageNumber number the stage number you want changed
+--- @return boolean success indicator of success
+--- @return string message error message
+Spearhead.API.Stages.changeStage = function(stageNumber) 
 
-divider: |
+---Returns the current stange number
+---Returns nil when the stagenumber was not set before ever, which means Spearhead was not started.
+---@return number | nil
+Spearhead.API.Stages.getCurrentStage = function()
 
-examples:
 
-CAP_A[1-4,6]7|[5,7]8_SomeName => Will fly CAP at stage 7 when stages 1 through 4 and 6 are active and will fly CAP at 8 when 5 and 7 are active
-CAP_A[2-5]5|[6]6_SomeName => Will fly CAP at stage 5 when stages 2 through 5 active and will fly CAP at 6 when 6 is active
-CAP_A[1-5]A|[6]7_SomeName => Will fly CAP at the ACTIVE stage if Stages 1-5 are active. Basically following the active stages. Then when 6 is active it will fly in 7
-
-CAP_B[1-5]A|[6]7_SomeName => Will fly BACKUP CAP for the active zones 1 through 5 and back up for 7 when 6 is active.
+---returns whether a stage (by index) is complete. 
+---@param stageNumber number
+---@return boolean | nil
+---@return string 
+Spearhead.API.Stages.isStageComplete = function(stageNumber)
 
 " class="copied"><svg class="octicon-copy" aria-hidden="true" viewBox="0 0 16 16" fill="currentColor" height="12" width="12"><path fill-rule="evenodd" d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z"></path><path fill-rule="evenodd" d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z"></path></svg><svg class="octicon-check" aria-hidden="true" viewBox="0 0 16 16" fill="currentColor" height="12" width="12"><path fill-rule="evenodd" d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"></path></svg></div></pre>
-    <h4 id="how-many-and-how-to-add-backups"><a class="anchor" aria-hidden="true" tabindex="-1" href="#how-many-and-how-to-add-backups"><span class="octicon octicon-link"></span></a>How many? And how to add backups?</h4>
-    <p>To fascilitate a nice flow of the mission and also make sure it doesn't oversaturate the zones with aircraft the script works with a Active/Backup system in the naming.<br>This really doesn't mean much per se once the mission runs, but most importantly is that the A units define how many groups there should be max in a zone at a time.<br>The B units will simply be used to fill that amount if the A units can't due to RTB, Death, Rearming etc.<br></p>
-    <h4 id="example"><a class="anchor" aria-hidden="true" tabindex="-1" href="#example"><span class="octicon octicon-link"></span></a>Example</h4>
-    <p>Take the units:</p>
-    <pre><code class="code-highlight"><span class="code-line line-number" line="1">CAP_A[1-5]A_SomeName1
-</span><span class="code-line line-number" line="2">CAP_A[1-5]A_SomeName2
-</span><span class="code-line line-number" line="3">CAP_B[1-3,5]A_SomeName
-</span></code><div onclick="copied(this)" data-code="CAP_A[1-5]A_SomeName1
-CAP_A[1-5]A_SomeName2
-CAP_B[1-3,5]A_SomeName
-" class="copied"><svg class="octicon-copy" aria-hidden="true" viewBox="0 0 16 16" fill="currentColor" height="12" width="12"><path fill-rule="evenodd" d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z"></path><path fill-rule="evenodd" d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z"></path></svg><svg class="octicon-check" aria-hidden="true" viewBox="0 0 16 16" fill="currentColor" height="12" width="12"><path fill-rule="evenodd" d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"></path></svg></div></pre>
-    <p><code>CAP_A...</code> units are primary units where the <code>CAP_B...</code> units are the backups.<br>In this case the CAP manager sees that for stages 1 through 5 this configuration requires 2 groups in the active zone.<br>If one of those 2 groups dies or is going back to base the B group will be used to top up the CAP units at that zone.<br>After scheduling the B units the A units that are back at base ready on the ramp will also not be scheduled until the CAP units that are active in the zone (inlcuding B units) drop below the required CAP unit (of 2 in this example)</p>
-    <p>In this example there is no Backup unit for zone 4. This might quiet down the CAP a little as the Active groups will have to rearm and refuel without there being any backup.</p>
-    <h4 id="what-the-cap-manager-does"><a class="anchor" aria-hidden="true" tabindex="-1" href="#what-the-cap-manager-does"><span class="octicon octicon-link"></span></a>What the cap manager does:</h4>
-    <ul>
-      <li>Spawn aircraft on the ramp (or despawn when they are not needed anymore for culling)</li>
-      <li>Send out aircraft based on where they are supposed to be</li>
-      <li>Send Aircraft RTB after X time.<br>RTB in this sense means back to its base of origin. Not the closest friendly base like DCS does.</li>
-      <li>Simulates Rearming and then sending them out when needed.</li>
-      <li>Delays aircraft for X amount of time before spawning and rearming after a groups demise.</li>
-      <li>Aircraft are spawned on the ramp so OCA does have effect. (Be sure to also take a look at the Airbase and SAM spawning for defences)</li>
-    </ul>
-    <h4 id="future-ideas"><a class="anchor" aria-hidden="true" tabindex="-1" href="#future-ideas"><span class="octicon octicon-link"></span></a>Future Ideas</h4>
-    <ul>
-      <li>Aircraft rearm hubs with finite spawns on other airbases that get replenished by aircraft flying in.</li>
-    </ul>
   <style>markdown-style pre .copied {
   display: flex;
   position: absolute;

@@ -1,5 +1,5 @@
 --[[
-        Spearhead Compile Time: 2024-12-11T20:17:28.126306
+        Spearhead Compile Time: 2024-12-14T18:28:12.893703
     ]]
 do --spearhead_events.lua
 
@@ -40,6 +40,7 @@ do
 
         ---@param newStageNumber number
         SpearheadEvents.PublishStageNumberChanged = function(newStageNumber)
+            
             for _, callable in pairs(OnStageNumberChangedListeners) do
                 local succ, err = pcall(function()
                     callable:OnStageNumberChanged(newStageNumber)
@@ -55,6 +56,8 @@ do
                     error(err)
                 end
             end
+
+            Spearhead.StageNumber = newStageNumber
         end
     end
 
@@ -3863,6 +3866,7 @@ do --init STAGE DIRECTOR
 
         o.stageNumber = orderNumber
         o.isActive = false
+        o.isComplete = false
         o.database = database
         o.logger = logger
         o.db = {}
@@ -3996,6 +4000,7 @@ do --init STAGE DIRECTOR
             end
 
             if self:IsComplete() == true then
+                self.isComplete = true
                 triggerStageCompleteListeners(self)
                 return nil
             end
@@ -4375,11 +4380,29 @@ function GlobalStageManager:NewAndStart(database, stageConfig)
     return o
 end
 
+---comment
+---@param stageNumber number
+---@return boolean | nil
+GlobalStageManager.isStageComplete = function (stageNumber)
+
+    local stageIndex = tostring(stageNumber)
+
+    if StagesByIndex[stageIndex] == nil then return nil end
+    
+    for _, stage in ipairs(StagesByIndex[stageIndex]) do
+        if stage.isComplete == false then
+            return false
+        end
+    end
+
+    return true
+end
+
 if not Spearhead.internal then Spearhead.internal = {} end
 Spearhead.internal.GlobalStageManager = GlobalStageManager
 
 end --GlobalStageManager.lua
-
+do --Main
 --Single player purpose
 
 local debug = false
@@ -4435,3 +4458,57 @@ Spearhead.LoadingDone()
 
 -- end
 
+end --Maindo --Spearhead API
+
+
+local SpearheadAPI = {}
+do
+    
+    SpearheadAPI.Stages = {}
+
+    --- Changes the active stage of spearhead.
+    --- All other stages will change based on the normal logic. (CAP, BLUE etc.)
+    --- @param stageNumber number the stage number you want changed
+    --- @return boolean success indicator of success
+    --- @return string message error message
+    SpearheadAPI.changeStage = function(stageNumber) 
+        if type(stageNumber) ~= "number" then
+            return false, "stageNumber " .. stageNumber .. " is not a valid number"
+        end
+
+        Spearhead.Events.PublishStageNumberChanged(stageNumber)
+        return true, ""
+    end
+
+    ---Returns the current stange number
+    ---Returns nil when the stagenumber was not set before ever, which means Spearhead was not started.
+    ---@return number | nil
+    SpearheadAPI.getCurrentStage = function()
+        return Spearhead.StageNumber or nil
+    end
+
+    ---returns whether a stage (by index) is complete. 
+    ---@param stageNumber number
+    ---@return boolean | nil
+    ---@return string 
+    SpearheadAPI.isStageComplete = function(stageNumber)
+        if type(stageNumber) ~= "number" then
+            return false, "stageNumber " .. stageNumber .. " is not a valid number"
+        end
+
+        local isComplete = Spearhead.internal.GlobalStageManager.isStageComplete(stageNumber)
+        if isComplete == nil then
+            return nil, "no stage found with number " .. stageNumber
+        end
+
+        return isComplete, ""
+    end
+
+end
+
+
+if Spearhead == nil then Spearhead = {} end
+Spearhead.API = SpearheadAPI
+
+
+end --Spearhead API
