@@ -1,5 +1,5 @@
 --[[
-        Spearhead Compile Time: 2024-12-14T18:31:34.674569
+        Spearhead Compile Time: 2024-12-14T18:32:39.524565
     ]]
 do --spearhead_events.lua
 
@@ -40,7 +40,6 @@ do
 
         ---@param newStageNumber number
         SpearheadEvents.PublishStageNumberChanged = function(newStageNumber)
-            
             for _, callable in pairs(OnStageNumberChangedListeners) do
                 local succ, err = pcall(function()
                     callable:OnStageNumberChanged(newStageNumber)
