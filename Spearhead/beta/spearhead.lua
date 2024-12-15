@@ -1,5 +1,5 @@
 --[[
-        Spearhead Compile Time: 2024-12-15T22:19:32.296624
+        Spearhead Compile Time: 2024-12-15T22:30:15.770786
     ]]
 do --spearhead_events.lua
 
@@ -4404,6 +4404,7 @@ do --Main
 
 --Single player purpose
 
+
 local debug = false
 local id = net.get_my_player_id()
 if id == 0 then
@@ -4456,6 +4457,7 @@ Spearhead.LoadingDone()
 --     trigger.action.lineToAll(-1 , 56+i , { x= a.x, y = 0, z = a.z } ,  { x = b.x, y = 0, z = b.z } , color , 1, true)
 
 -- end
+
 
 end --Main
 do --Spearhead API
@@ -4510,6 +4512,7 @@ end
 
 if Spearhead == nil then Spearhead = {} end
 Spearhead.API = SpearheadAPI
+
 
 
 end --Spearhead API
