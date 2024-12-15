@@ -1,5 +1,5 @@
 --[[
-        Spearhead Compile Time: 2024-12-15T22:00:19.782622
+        Spearhead Compile Time: 2024-12-15T22:19:32.296624
     ]]
 do --spearhead_events.lua
 
@@ -4401,6 +4401,7 @@ Spearhead.internal.GlobalStageManager = GlobalStageManager
 
 end --GlobalStageManager.lua
 do --Main
+
 --Single player purpose
 
 local debug = false
@@ -4456,7 +4457,9 @@ Spearhead.LoadingDone()
 
 -- end
 
-end --Maindo --Spearhead API
+end --Main
+do --Spearhead API
+
 
 
 local SpearheadAPI = {}
