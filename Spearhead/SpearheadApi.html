@@ -102,9 +102,9 @@ customElements.define('markdown-style', MarkdownStyle);</script><markdown-style 
     <pre class="language-lua"><code class="language-lua code-highlight"><span class="code-line line-number" line="1">
 </span><span class="code-line line-number" line="2"><span class="token comment">---Changes the active stage of spearhead.</span>
 </span><span class="code-line line-number" line="3"><span class="token comment">--- All other stages will change based on the normal logic. (CAP, BLUE etc.)</span>
-</span><span class="code-line line-number" line="4"><span class="token comment">--- @param stageNumber number the stage number you want changed</span>
-</span><span class="code-line line-number" line="5"><span class="token comment">--- @return boolean success indicator of success</span>
-</span><span class="code-line line-number" line="6"><span class="token comment">--- @return string message error message</span>
+</span><span class="code-line line-number" line="4"><span class="token comment">---@param stageNumber number the stage number you want changed</span>
+</span><span class="code-line line-number" line="5"><span class="token comment">---@return boolean success indicator of success</span>
+</span><span class="code-line line-number" line="6"><span class="token comment">---@return string message error message</span>
 </span><span class="code-line line-number" line="7">Spearhead<span class="token punctuation">.</span>API<span class="token punctuation">.</span>Stages<span class="token punctuation">.</span>changeStage <span class="token operator">=</span> <span class="token keyword">function</span><span class="token punctuation">(</span>stageNumber<span class="token punctuation">)</span> 
 </span><span class="code-line line-number" line="8">
 </span><span class="code-line line-number" line="9"><span class="token comment">---Returns the current stange number</span>
@@ -122,9 +122,9 @@ customElements.define('markdown-style', MarkdownStyle);</script><markdown-style 
 </span></code><div onclick="copied(this)" data-code="
 ---Changes the active stage of spearhead.
 --- All other stages will change based on the normal logic. (CAP, BLUE etc.)
---- @param stageNumber number the stage number you want changed
---- @return boolean success indicator of success
---- @return string message error message
+---@param stageNumber number the stage number you want changed
+---@return boolean success indicator of success
+---@return string message error message
 Spearhead.API.Stages.changeStage = function(stageNumber) 
 
 ---Returns the current stange number

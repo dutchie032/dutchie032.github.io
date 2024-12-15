@@ -1,5 +1,5 @@
 --[[
-        Spearhead Compile Time: 2024-12-14T18:32:39.524565
+        Spearhead Compile Time: 2024-12-15T12:05:30.874741
     ]]
 do --spearhead_events.lua
 
@@ -3798,7 +3798,6 @@ do -- INIT Mission Class
 
                         Spearhead.Events.addOnUnitLostEventListener(unitName, self)
                         
-
                         if isGroupTarget == true or Spearhead.Util.startswith(unitName, "TGT_") == true then
                             self.targetAliveStates[group_name][unitName] = true
                             self.hasSpecificTargets = true
@@ -4470,7 +4469,7 @@ do
     --- @param stageNumber number the stage number you want changed
     --- @return boolean success indicator of success
     --- @return string message error message
-    SpearheadAPI.changeStage = function(stageNumber) 
+    SpearheadAPI.Stages.changeStage = function(stageNumber) 
         if type(stageNumber) ~= "number" then
             return false, "stageNumber " .. stageNumber .. " is not a valid number"
         end
@@ -4482,7 +4481,7 @@ do
     ---Returns the current stange number
     ---Returns nil when the stagenumber was not set before ever, which means Spearhead was not started.
     ---@return number | nil
-    SpearheadAPI.getCurrentStage = function()
+    SpearheadAPI.Stages.getCurrentStage = function()
         return Spearhead.StageNumber or nil
     end
 
