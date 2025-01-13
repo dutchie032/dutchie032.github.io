@@ -87,7 +87,7 @@
     `;s.appendChild(a)}i(t,e){this.dispatchEvent(new CustomEvent(t,{bubbles:true,composed:true,detail:e}))}}customElements.define("dark-mode",a);</script><div style="max-width: 960px; margin: 0 auto 60px auto; padding: 8px;max-width: 960px;" class="markdown-style" mode="dark">
     <h1 id="spearhead"><a class="anchor" aria-hidden="true" tabindex="-1" href="#spearhead"><span class="octicon octicon-link"></span></a>Spearhead</h1>
     <blockquote>
-      <p><strong><em>Spearhead last updated at:</em></strong> 2025-01-13T18:33:42.096917</p>
+      <p><strong><em>Spearhead last updated at:</em></strong> 2025-01-13T18:54:12.134573</p>
     </blockquote>
     <h2 id="get-started"><a class="anchor" aria-hidden="true" tabindex="-1" href="#get-started"><span class="octicon octicon-link"></span></a>Get Started</h2>
     <p>This guide is to get you started building your first Spearhead mission.<br>Spearhead was created to enable the mission maker to worry as little about the running, timing and scripting and most about the setting and looks and feel of the mission.<br></p>
@@ -224,19 +224,21 @@ SAM -- Special type that will also activate on &#x22;pre-activated stages&#x22;
       <img src="img/carrierroutes.png" alt="carrierroutes">
     </p>
     <h3 id="farps"><a class="anchor" aria-hidden="true" tabindex="-1" href="#farps"><span class="octicon octicon-link"></span></a>Farps</h3>
-    <p>Farp logic is in the works, but still needs some refinement.<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"></p>
-    <div style="position:fixed; 
-    left:80%; 
-    top:80%;
-    height:15%;
-    width:15%;
-    padding:10px;
-    background-color: #00053B;
-    border-radius: 8px;">
-      <div style="margin-bottom: 8px;"><a href="/Spearhead/GetStarted.html" style="color: white; font-size: 18px; "><i class="bi bi-file-earmark-richtext"></i> Reference</a></div>
-      <div style="margin-bottom: 8px;"><a href="/Spearhead/Reference.html" style="color: white; font-size: 18px;"><i class="bi bi-rocket-takeoff"></i> Get Started</a></div>
-      <div style="margin-bottom: 8px;"><a href="/Spearhead/Persistence.html" style="color: white; font-size: 18px;"><i class="bi bi-database-check"></i> Persistence</a></div>
-      <div style="margin-bottom: 8px;"><a href="/Spearhead/SpearheadApi.html" style="color: white; font-size: 18px;"><i class="bi bi-gear"></i> API</a></div>
+    <p>Farp logic is in the works, but still needs some refinement.</p>
+    <div id="menu"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+      <div style="position:fixed; 
+        left:80%; 
+        top:80%;
+        height:15%;
+        width:15%;
+        padding:10px;
+        background-color: #00053B;
+        border-radius: 8px;">
+        <div style="margin-bottom: 8px;"><a href="/Spearhead/GetStarted.html" style="color: white; font-size: 18px; "><i class="bi bi-file-earmark-richtext"></i> Reference</a></div>
+        <div style="margin-bottom: 8px;"><a href="/Spearhead/Reference.html" style="color: white; font-size: 18px;"><i class="bi bi-rocket-takeoff"></i> Get Started</a></div>
+        <div style="margin-bottom: 8px;"><a href="/Spearhead/Persistence.html" style="color: white; font-size: 18px;"><i class="bi bi-database-check"></i> Persistence</a></div>
+        <div style="margin-bottom: 8px;"><a href="/Spearhead/SpearheadApi.html" style="color: white; font-size: 18px;"><i class="bi bi-gear"></i> API</a></div>
+      </div>
     </div>
     <script>/*! @uiw/copy-to-clipboard v1.0.12 | MIT (c) 2021 Kenny Wang | https://github.com/uiwjs/copy-to-clipboard.git */
 !function(e,t){"object"==typeof exports&&"undefined"!=typeof module?module.exports=t():"function"==typeof define&&define.amd?define(t):(e="undefined"!=typeof globalThis?globalThis:e||self).copyTextToClipboard=t()}(this,(function(){"use strict";return function(e,t){const o=document.createElement("textarea");o.value=e,o.setAttribute("readonly",""),o.style={position:"absolute",left:"-9999px"},document.body.appendChild(o);const n=document.getSelection().rangeCount>0&&document.getSelection().getRangeAt(0);o.select();let c=!1;try{c=!!document.execCommand("copy")}catch(e){c=!1}document.body.removeChild(o),n&&document.getSelection&&(document.getSelection().removeAllRanges(),document.getSelection().addRange(n)),t&&t(c)}}));

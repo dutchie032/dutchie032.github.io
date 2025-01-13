@@ -142,19 +142,21 @@
     <h2 id="airbases"><a class="anchor" aria-hidden="true" tabindex="-1" href="#airbases"><span class="octicon octicon-link"></span></a>Airbases</h2>
     <p>Airbase units will also be checked for overlap. As the blue units will be spawned after the RED unit.<br>Units that were alive when the stage was completed will be removed. Units that died will have corpses spawned.<br></p>
     <h2 id="warehouses"><a class="anchor" aria-hidden="true" tabindex="-1" href="#warehouses"><span class="octicon octicon-link"></span></a>Warehouses</h2>
-    <p>Currently warehouses are not implemented and therefore warehouses are not persisted.<br>When supply missions and logistics get implemented warehouses will be persisted as well.<br></p><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-    <div style="position:fixed; 
-    left:80%; 
-    top:80%;
-    height:15%;
-    width:15%;
-    padding:10px;
-    background-color: #00053B;
-    border-radius: 8px;">
-      <div style="margin-bottom: 8px;"><a href="/Spearhead/GetStarted.html" style="color: white; font-size: 18px; "><i class="bi bi-file-earmark-richtext"></i> Reference</a></div>
-      <div style="margin-bottom: 8px;"><a href="/Spearhead/Reference.html" style="color: white; font-size: 18px;"><i class="bi bi-rocket-takeoff"></i> Get Started</a></div>
-      <div style="margin-bottom: 8px;"><a href="/Spearhead/Persistence.html" style="color: white; font-size: 18px;"><i class="bi bi-database-check"></i> Persistence</a></div>
-      <div style="margin-bottom: 8px;"><a href="/Spearhead/SpearheadApi.html" style="color: white; font-size: 18px;"><i class="bi bi-gear"></i> API</a></div>
+    <p>Currently warehouses are not implemented and therefore warehouses are not persisted.<br>When supply missions and logistics get implemented warehouses will be persisted as well.<br></p>
+    <div id="menu"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+      <div style="position:fixed; 
+        left:80%; 
+        top:80%;
+        height:15%;
+        width:15%;
+        padding:10px;
+        background-color: #00053B;
+        border-radius: 8px;">
+        <div style="margin-bottom: 8px;"><a href="/Spearhead/GetStarted.html" style="color: white; font-size: 18px; "><i class="bi bi-file-earmark-richtext"></i> Reference</a></div>
+        <div style="margin-bottom: 8px;"><a href="/Spearhead/Reference.html" style="color: white; font-size: 18px;"><i class="bi bi-rocket-takeoff"></i> Get Started</a></div>
+        <div style="margin-bottom: 8px;"><a href="/Spearhead/Persistence.html" style="color: white; font-size: 18px;"><i class="bi bi-database-check"></i> Persistence</a></div>
+        <div style="margin-bottom: 8px;"><a href="/Spearhead/SpearheadApi.html" style="color: white; font-size: 18px;"><i class="bi bi-gear"></i> API</a></div>
+      </div>
     </div>
     <script>/*! @uiw/copy-to-clipboard v1.0.12 | MIT (c) 2021 Kenny Wang | https://github.com/uiwjs/copy-to-clipboard.git */
 !function(e,t){"object"==typeof exports&&"undefined"!=typeof module?module.exports=t():"function"==typeof define&&define.amd?define(t):(e="undefined"!=typeof globalThis?globalThis:e||self).copyTextToClipboard=t()}(this,(function(){"use strict";return function(e,t){const o=document.createElement("textarea");o.value=e,o.setAttribute("readonly",""),o.style={position:"absolute",left:"-9999px"},document.body.appendChild(o);const n=document.getSelection().rangeCount>0&&document.getSelection().getRangeAt(0);o.select();let c=!1;try{c=!!document.execCommand("copy")}catch(e){c=!1}document.body.removeChild(o),n&&document.getSelection&&(document.getSelection().removeAllRanges(),document.getSelection().addRange(n)),t&&t(c)}}));
