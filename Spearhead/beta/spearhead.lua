@@ -1,5 +1,5 @@
 --[[
-        Spearhead Compile Time: 2025-01-13T18:58:16.097554
+        Spearhead Compile Time: 2025-01-20T05:49:32.563862
     ]]
 do --spearhead_events.lua
 
@@ -13,16 +13,15 @@ do
         env.error("[Spearhead][Events] " .. (text or "nil"))
     end
 
+    ---@class OnStageChangedListener
+    ---@field OnStageNumberChanged fun(self:OnStageChangedListener, number:integer)
+
     do -- STAGE NUMBER CHANGED
         local OnStageNumberChangedListeners = {}
         local OnStageNumberChangedHandlers = {}
         ---Add a stage zone number changed listener
-        ---@param listener table object with function OnStageNumberChanged(self, number)
+        ---@param listener OnStageChangedListener object with function OnStageNumberChanged(self, number)
         SpearheadEvents.AddStageNumberChangedListener = function(listener)
-            if type(listener) ~= "table" then
-                warn("Event listener not of type table, did you mean to use handler?")
-                return
-            end
             table.insert(OnStageNumberChangedListeners, listener)
         end
 
@@ -80,11 +79,15 @@ do
         table.insert(onLandEventListeners[unitName], landListener)
     end
 
+    ---@class OnUnitLostListener
+    ---@field OnUnitLost fun(self:OnUnitLostListener, unit:table)
+
+    ---@type table<string,Array<OnUnitLostListener>>
     local OnUnitLostListeners = {}
     ---This listener gets fired for any event that can indicate a loss of a unit.
     ---Such as: Eject, Crash, Dead, Unit_Lost,
     ---@param unitName any
-    ---@param unitLostListener table Object with function: OnUnitLost(initiatorUnit)
+    ---@param unitLostListener OnUnitLostListener 
     SpearheadEvents.addOnUnitLostEventListener = function(unitName, unitLostListener)
         if type(unitLostListener) ~= "table" then
             warn("Unit lost Event listener not of type table/object")
@@ -203,39 +206,6 @@ do
                     end
                 end
             end
-        end
-    end
-
-    do     --COMMANDS
-        do -- status updates
-            local onStatusRequestReceivedListeners = {}
-            ---comment
-            ---@param listener table object with OnStatusRequestReceived(self, groupId)
-            SpearheadEvents.AddOnStatusRequestReceivedListener = function(listener)
-                if type(listener) ~= "table" then
-                    warn("Unit lost Event listener not of type table/object")
-                    return
-                end
-
-                table.insert(onStatusRequestReceivedListeners, listener)
-            end
-
-            local triggerStatusRequestReceived = function(groupId)
-                for _, callable in pairs(onStatusRequestReceivedListeners) do
-                    local succ, err = pcall(function()
-                        callable:OnStatusRequestReceived(groupId)
-                    end)
-                end
-            end
-
-            SpearheadEvents.AddCommandsToGroup = function(groupId)
-                local base = "MISSIONS"
-                if groupId then
-                    missionCommands.addCommandForGroup(groupId, "Stage Status", nil, triggerStatusRequestReceived,
-                        groupId)
-                end
-            end
-
         end
     end
 
@@ -849,9 +819,32 @@ local SpearheadDB = {}
 do -- DB
     local singleton = nil
 
+    ---@class Database
+    ---@field private tables table tables
+    ---@field private Logger Logger 
+    ---@field GetNewMissionCode fun(self:Database): integer
+    ---@field GetDescriptionForMission fun(self:Database, MissionZoneName:string) : string|nil
+    ---@field getAirbaseIdsInStage fun(self:Database, stageZoneName:string) : Array<integer>
+    ---@field getBlueGroupsAtAirbase fun(self:Database, airbaseId:integer) : Array<string>
+    ---@field getRedGroupsAtAirbase fun(self:Database, airbaseId:integer) : Array<string>
+    ---@field getBlueSamGroupsInZone fun(self:Database, samZoneName:string) : Array<string>
+    ---@field getBlueSamsInStage fun(self:Database, stageZoneName:string) : Array<string>
+    ---@field getCapGroupsAtAirbase fun(self:Database, airbaseId0:integer) : Array<string>
+    ---@field getCapRouteInZone fun(self:Database, stageNumber:integer, baseId:integer) : Array<string>
+    ---@field getCarrierRouteZones fun(self:Database) : Array<string>
+    ---@field getFarpPadsInFarpZone fun(self:Database, farpZoneName:string) : Array<string>
+    ---@field getFarpZonesInStage fun(self:Database, stageZoneName:string) : Array<string>
+    ---@field getGroupsForMissionZone fun(self:Database, missionZoneName:string) : Array<string>
+    ---@field getGroupsInFarpZone fun(self:Database, farpZoneName:string) : Array<string>
+    ---@field getMiscGroupsAtStage fun(self:Database, stageZoneName:string) : Array<string>
+    ---@field getMissionBriefingForMissionZone fun(self:Database, missionZoneName:string): string
+    ---@field getMissionsForStage fun(self:Database, stageZoneName:string) : Array<string>
+    ---@field getRandomMissionsForStage fun(self:Database, stageZoneName:string) : Array<string>
+    ---@field getStagezoneNames fun(self:Database) : Array<string>
+
     ---comment
     ---@param Logger table
-    ---@return table
+    ---@return Database
     function SpearheadDB:new(Logger, debug)
         if not debug then debug = false end
         if singleton ~= nil then
@@ -859,9 +852,14 @@ do -- DB
             return singleton
         end
 
-        local o = {}
-        setmetatable(o, { __index = self })
-
+        local tables = {}
+        
+        local o = {
+            Logger = Logger,
+            tables = tables,
+        }
+        setmetatable(o, { __index = self, })
+        
         o.Logger = Logger
         o.tables = {}
         do --INIT ALL TABLES
@@ -1333,11 +1331,11 @@ do -- DB
             o.tables.missionCodes = {}
         end
 
-        o.GetDescriptionForMission = function(self, missionZoneName)
+        function o:GetDescriptionForMission(missionZoneName)
             return self.tables.descriptions[missionZoneName]
         end
 
-        o.getCapRouteInZone = function(self, stageNumber, baseId)
+        function o.getCapRouteInZone(stageNumber, baseId)
             local stageNumber = tostring(stageNumber) or "nothing"
             local routeData = self.tables.capRoutesPerStageNumber[stageNumber]
             if routeData then
@@ -1395,15 +1393,6 @@ do -- DB
         end
         ---comment
         ---@param self table
-        ---@param number number
-        ---@return string zoneName
-        o.getStageZonesByStageNumber = function(self, number)
-            local numberString = tostring(number)
-            return self.tables.stage_zonesByNumer[numberString]
-        end
-
-        ---comment
-        ---@param self table
         ---@return table result a  list of stage zone names
         o.getStagezoneNames = function(self)
             return self.tables.stage_zones
@@ -1458,10 +1447,9 @@ do -- DB
             return self.tables.capGroupsOnAirbase[airbaseId] or {}
         end
 
-        ---@param self table
         ---@param stageName string
         ---@return table
-        o.getBlueSamsInStage = function(self, stageName)
+        function o:getBlueSamsInStage(stageName)
             return self.tables.blueSamZonesPerStage[stageName] or {}
         end
 
@@ -1486,6 +1474,9 @@ do -- DB
             return self.tables.miscGroupsInStages[stageName] or {}
         end
 
+        ---comment
+        ---@param self table
+        ---@return integer|nil
         o.GetNewMissionCode = function(self)
             local code = nil
             local tries = 0
@@ -2015,9 +2006,8 @@ do     -- INIT DCS_UTIL
     end
 
     ---destroy the given unit
-    ---@param groupName string 
-    function DCS_UTIL.DestroyUnit(groupName, unitName)
-        if DCS_UTIL.IsGroupStatic(groupName) == true then
+    function DCS_UTIL.DestroyUnit(unitName)
+        if DCS_UTIL.IsGroupStatic(unitName) == true then
             local object = StaticObject.getByName(unitName)
             if object ~= nil then
                 object:destroy()
@@ -2371,6 +2361,8 @@ do     -- INIT DCS_UTIL
     end
 
     function DCS_UTIL.CleanCorpse(unitName)
+        local unitName = "dead_" .. unitName
+
         local object = StaticObject.getByName(unitName)
 
         if object then
@@ -2385,19 +2377,20 @@ do     -- INIT DCS_UTIL
     ---@param route table? route of the group. If nil wil be the default route.
     ---@param uncontrolled boolean? Sets the group to be uncontrolled on spawn
     ---@return table? new_group the Group class that was spawned
+    ---@return boolean? isStatic whether the group is a static or not
     function DCS_UTIL.SpawnGroupTemplate(groupName, location, route, uncontrolled)
         if groupName == nil then
-            return
+            return nil, nil
         end
 
         local template = DCS_UTIL.GetMizGroupOrDefault(groupName, nil)
         if template == nil then
-            return nil
+            return nil, nil
         end
         if template.category == DCS_UTIL.GroupCategory.STATIC then
             --TODO: Implement location and route stuff
             local spawn_template = template.group_template
-            coalition.addStaticObject(template.country_id, spawn_template)
+            return coalition.addStaticObject(template.country_id, spawn_template), true
         else
             local spawn_template = template.group_template
             if location ~= nil then
@@ -2425,7 +2418,7 @@ do     -- INIT DCS_UTIL
                 spawn_template.uncontrolled = uncontrolled
             end
             local new_group = coalition.addGroup(template.country_id, template.category, spawn_template)
-            return new_group
+            return new_group, false
         end
     end
 
@@ -2449,22 +2442,25 @@ Spearhead.DcsUtil = DCS_UTIL
 
 local LOGGER = {}
 do
-    LOGGER.LogLevelOptions = {
-        DEBUG = 0,
-        INFO = 1,
-        WARN = 2,
-        ERROR = 3,
-        NONE = 4
-    }
+    
 
     local PreFix = "Spearhead"
 
-    function LOGGER:new(logger_name, logLevel, liveLoggingLevel)
+    --- @class Logger
+    --- @field debug fun(self:Logger, text:string)
+    --- @field info fun(self:Logger, text:string)
+    --- @field warn fun(self:Logger, text:string)
+    --- @field error fun(self:Logger, text:string)
+
+    ---comment
+    ---@param logger_name any
+    ---@param logLevel LogLevel
+    ---@return Logger
+    function LOGGER:new(logger_name, logLevel)
         local o = {}
         setmetatable(o, { __index = self })
         o.LoggerName = logger_name or "(loggername not set)"
-        o.LogLevel = logLevel or LOGGER.LogLevelOptions.INFO
-        o.LiveLoggingLevel = liveLoggingLevel or LOGGER.LogLevelOptions.NONE
+        o.LogLevel = logLevel or "INFO"
 
         ---comment
         ---@param self table self logger
@@ -2475,12 +2471,8 @@ do
             end
             message = UTIL.toString(message)
 
-            if self.LogLevel <= LOGGER.LogLevelOptions.INFO then
+            if self.LogLevel == "INFO" or self.LogLevel == "DEBUG" then
                 env.info("[" .. PreFix .. "]" .. "[" .. self.LoggerName .. "] " .. message)
-            end
-
-            if self.LiveLoggingLevel <= LOGGER.LogLevelOptions.INFO then
-                trigger.action.outText(message, 20)
             end
         end
 
@@ -2492,12 +2484,8 @@ do
             end
             message = UTIL.toString(message)
 
-            if self.LogLevel <= LOGGER.LogLevelOptions.WARN then
-                env.warning("[" .. PreFix .. "]" .. "[" .. self.LoggerName .. "] " .. message)
-            end
-
-            if self.LiveLoggingLevel <= LOGGER.LogLevelOptions.WARN then
-                trigger.action.outText(message, 20)
+            if self.LogLevel == "INFO" or self.LogLevel == "DEBUG" or self.LogLevel == "WARN" then
+                env.info("[" .. PreFix .. "]" .. "[" .. self.LoggerName .. "] " .. message)
             end
         end
 
@@ -2511,12 +2499,8 @@ do
 
             message = UTIL.toString(message)
 
-            if self.LogLevel <= LOGGER.LogLevelOptions.ERROR then
-                env.error("[" .. PreFix .. "]" .. "[" .. self.LoggerName .. "] " .. message)
-            end
-
-            if self.LiveLoggingLevel <= LOGGER.LogLevelOptions.ERROR then
-                trigger.action.outText(message, 20)
+            if self.LogLevel == "INFO" or self.LogLevel == "DEBUG" or self.LogLevel == "WARN" or self.logLevel == "ERROR" then
+                env.info("[" .. PreFix .. "]" .. "[" .. self.LoggerName .. "] " .. message)
             end
         end
 
@@ -2529,12 +2513,8 @@ do
             end
 
             message = UTIL.toString(message)
-            if self.LogLevel <= LOGGER.LogLevelOptions.DEBUG then
+            if self.LogLevel == "DEBUG" then
                 env.info("[" .. PreFix .. "]" .. "[" .. self.LoggerName .. "][DEBUG] " .. message)
-            end
-
-            if self.LiveLoggingLevel <= LOGGER.LogLevelOptions.DEBUG then
-                trigger.action.outText(message, 20)
             end
         end
 
@@ -2549,15 +2529,13 @@ function Spearhead.AddMissionEditorWarning(warningMessage)
     table.insert(Spearhead.MissionEditingWarnings, warningMessage or "skip")
 end
 
-missionCommands.addSubMenu("Missions")
-
 local loadDone = false
 Spearhead.LoadingDone = function()
     if loadDone == true then
         return
     end
 
-    local warningLogger = Spearhead.LoggerTemplate:new("MISSIONPARSER", Spearhead.LoggerTemplate.LogLevelOptions.INFO, 4)
+    local warningLogger = Spearhead.LoggerTemplate:new("MISSIONPARSER", "INFO")
     if Spearhead.Util.tableLength(Spearhead.MissionEditingWarnings) > 0 then
         for key, message in pairs(Spearhead.MissionEditingWarnings) do
             warningLogger:warn(message)
@@ -2756,6 +2734,83 @@ end
 if not Spearhead.internal then Spearhead.internal = {} end
 Spearhead.internal.CapAirbase = CapBase
 end --CapAirbase.lua
+do --AirGroup.lua
+
+
+---@class AirGroup
+---@field groupName string
+---@field groupState GroupState 
+local AirGroup = {}
+
+---@alias GroupState
+---| "UnSpawned"
+---| "ReadOnTheRamp
+---| "InTransit"
+---| "OnStation"
+---| "RtbInTen"
+---| "Rtb"
+---| "Dead"
+---| "Rearming"
+
+
+---@alias AirGroupType
+---| "CAP"
+
+---| "CAS"
+---| "SEAD"
+---| "INTERCEPT"
+---| ""
+
+
+---@class GroupNameData
+---@field type AirGroupType
+---@field isBackup boolean
+---@field zonesConfig table<string, string>
+
+local function parseGroupName(groupName)
+
+    local split_string = Spearhead.Util.split_string(groupName, "_")
+    local partCount = Spearhead.Util.tableLength(split_string)
+    
+    if partCount >= 3 then
+
+        ---@type boolean
+        local isBackup = false
+
+        do -- config
+        
+        
+        end
+
+    else
+        Spearhead.AddMissionEditorWarning("CAP Group with name: " .. groupName .. "should have at least 3 parts, but has " .. partCount)
+        return nil
+    end
+
+
+end
+
+
+---comment
+---@generic T: AirGroup
+---@param o T
+---@param groupName string
+---@return T
+function AirGroup.New(o, groupName)
+    AirGroup.__index = AirGroup
+    local o = o or {}
+    local self = setmetatable(o, AirGroup)
+
+    self.groupName = groupName
+    self.groupState = "UnSpawned"
+
+
+
+    return self
+end
+
+
+end --AirGroup.lua
 do --GlobalCapManager.lua
 local GlobalCapManager = {}
 do
@@ -3228,45 +3283,39 @@ Spearhead.internal.CapGroup = CapGroup
 end --CapGroup.lua
 do --StageConfig.lua
 
+--- @class StageConfig
+--- @field isEnabled boolean
+--- @field isDrawStagesEnabled boolean
+--- @field isAutoStages boolean
+--- @field startingStage integer
+--- @field maxMissionsPerStage integer
+--- @field logLevel LogLevel
+
+
 local StageConfig = {};
+
+---comment
+---@return StageConfig
 function StageConfig:new()
-    local o = {}
-    setmetatable(o, { __index = self })
 
     if SpearheadConfig == nil then SpearheadConfig = {} end
     if SpearheadConfig.StageConfig == nil then SpearheadConfig.StageConfig = {} end
 
-    local enabled = SpearheadConfig.StageConfig.enabled
-    if enabled == nil then enabled = true end
-    ---@return boolean
-    o.isEnabled = function(self) return enabled == true end
+    ---@type StageConfig
+    local o = {
+        isEnabled = SpearheadConfig.StageConfig.enabled or true,
+        isDrawStagesEnabled = SpearheadConfig.StageConfig.drawStages or true,
+        isAutoStages = SpearheadConfig.StageConfig.autoStages or true,
+        startingStage = SpearheadConfig.StageConfig.startingStage or 1,
+        maxMissionsPerStage = SpearheadConfig.StageConfig.maxMissionStage or 10,
+        logLevel = "INFO"
+    }
 
-    local drawStages = SpearheadConfig.StageConfig.drawStages
-    if drawStages == nil then drawStages = true end
-    ---@return boolean
-    o.isDrawStagesEnabled = function(self) return drawStages == true end
-
-    local autoStages = SpearheadConfig.StageConfig.autoStages or true
-    if autoStages == nil then autoStages = true end
-    ---@return boolean
-    o.isAutoStages = function(self) return autoStages end
-
-    local maxMissionsPerStage = SpearheadConfig.StageConfig.maxMissionStage
-    o.getMaxMissionsPerStage = function(self) return maxMissionsPerStage end
-
-    o.logLevel  = Spearhead.LoggerTemplate.LogLevelOptions.INFO
-
-    local startingStage = SpearheadConfig.StageConfig.startingStage or 1
-    o.getStartingStage = function(self) return startingStage end
-
-    o.toString = function()
-        return Spearhead.Util.toString({
-            maxMissionsPerStage = maxMissionsPerStage,
-            enabled = enabled, 
-            drawStages = drawStages,
-            autoStages = autoStages
-        })
+    if SpearheadConfig.StageConfig.debugEnabled == true then
+        o.logLevel = "DEBUG"
     end
+
+    setmetatable(o, { __index = self })
 
     return o;
 end
@@ -3326,7 +3375,7 @@ function CapConfig:new()
     local deathDelay = tonumber(SpearheadConfig.CapConfig.deathDelay) or 1800
     ---@return number
     o.getDeathDelay = function(self) return deathDelay end
-    o.logLevel  = Spearhead.LoggerTemplate.LogLevelOptions.INFO
+    o.logLevel  = "INFO"
 
     return o;
 end
@@ -3344,7 +3393,7 @@ local fleetGroups = {}
 
 GlobalFleetManager.start = function(database)
 
-    local logger = Spearhead.LoggerTemplate:new("CARRIERFLEET", Spearhead.LoggerTemplate.LogLevelOptions.INFO)
+    local logger = Spearhead.LoggerTemplate:new("CARRIERFLEET", "INFO")
 
     local all_groups = Spearhead.DcsUtil.getAllGroupNames()
     for _, groupName in pairs(all_groups) do
@@ -3498,36 +3547,28 @@ do --Persistence.lua
 
 local Persistence = {}
 do
-    --[[
-        The Tables: 
+    ---@class PersistentData
+    ---@field dead_units table<string, DeathState>
+    ---@field activeStage integer|nil
 
-        tables {
-            number activeStage;
+    ---@class DeathState 
+    ---@field isDead boolean
+    ---@field pos Position
+    ---@field heading number
+    ---@field type string
+    ---@field country_id integer
 
-            Dict stages: [
-                "stageName": {
-                    Dict missions: [
-                        "missionName":{
-                            boolean isCompleted;
-                            Dict aliveUnits: [
-                                "unitName" : true | false
-                            ]
-                        }
-                    ]
-                }
-            ]
-        }
-    ]]--
 
     local persistanceWriteIntervalSeconds = 15
     local enabled = false
 
-    local tables = {}
-    tables.activeStage = nil
-    tables.stages = {}
-    tables.dead_units = {}
+    ---@type PersistentData
+    local tables = {
+        dead_units = {},
+        activeStage = nil
+    }
 
-
+    
     local logger = {}
 
     if SpearheadConfig == nil then SpearheadConfig = {} end
@@ -3577,8 +3618,7 @@ do
                         pos = deadState.pos,
                         heading = deadState.heading,
                         type = deadState.type,
-                        country_id = deadState.country_id,
-                        isCleaned = deadState.isCleaned
+                        country_id = deadState.country_id
                     }
                 end
             end
@@ -3624,10 +3664,13 @@ do
         return enabled
     end
 
+
+    ---comment
+    ---@param persistenceLogger Logger
     Persistence.Init = function(persistenceLogger)
         logger = persistenceLogger
 
-        logger:info("Initiating Persistance Manager")
+        logger:info("Initiating Persistence Manager")
 
         if lfs == nil or io == nil then
             env.error("[Spearhead][Persistence] lfs and io seem to be sanitized. Persistence is skipped and disabled")
@@ -3648,7 +3691,7 @@ do
     end
 
     ---Get the active stage as in the persistance file
-    ---@return number|nil
+    ---@return integer|nil
     Persistence.GetActiveStage = function()
         if tables.activeStage then
             return tables.activeStage
@@ -3656,29 +3699,25 @@ do
         return nil
     end
 
-    ---Checks if the mission is complete
-    ---@param stageName any
-    ---@param missionZoneName any
-    ---@return boolean
-    Persistence.IsMissionComplete = function(stageName, missionZoneName)
-
-        if tables.stages[stageName] and tables.stages[stageName].missions and tables.stages[stageName].missions[missionZoneName] then
-            return tables.stages[stageName].missions[missionZoneName].isComplete == true
-        end
-        
-        return false
-    end
-
-    ---Check if the unit was dead during the last save. Nil if alive
+    ---Check if the unit was dead during the last save. Nil if persitance not enabled
     ---@param unitName string name
-    ---@return table|nil { isDead, pos = {x,y,z}, heading, type, country_id }
+    ---@return DeathState|nil { isDead, pos = {x,y,z}, heading, type, country_id } 
     Persistence.UnitDeadState = function(unitName)
-        return tables.dead_units[unitName]
+        if Persistence.isEnabled() == false then
+            return nil
+        end
+
+        local entry =  tables.dead_units[unitName]
+        if entry then
+            return entry
+        else
+            return { isDead = false }
+        end
     end
 
     ---Pass the unit to be saved as "dead"
     ---@param name string
-    ---@param position table { x, y ,z } 
+    ---@param position Position { x, y ,z } 
     ---@param heading number
     ---@param type string 
     ---@param country_id number
@@ -3695,15 +3734,6 @@ do
          }
         updateRequired = true
     end
-
-    Persistence.CorpseCleaned = function(unitName)
-        local data = tables.dead_units[unitName]
-        if data then
-            data.isCleaned = true
-        end
-        updateRequired = true
-    end
-
 end
 
 if Spearhead == nil then Spearhead = {} end
@@ -3711,1397 +3741,126 @@ if Spearhead.classes == nil then Spearhead.classes = {} end
 if Spearhead.classes.persistence == nil then Spearhead.classes.persistence = {} end
 Spearhead.classes.persistence.Persistence = Persistence
 end --Persistence.lua
-do --StageFarp.lua
-
-
-local StageFarp = {}
-do
-    
-
-    function StageFarp:new(database, logger, farpZoneName)
-
-        local o = {}
-        setmetatable(o, { __index = self })
-
-        o.db = database
-        o.logger = logger
-
-        o.red_groups = {}
-        o.blue_groups = {}
-        o.cleanup_units = {}
-        o.spawn_pads = {}
-
-        do --init
-            
-            local redUnitsPos = {}
-            local blueUnitsPos = {}
-
-            do -- fill tables
-                local groups = database:getGroupsInFarpZone(farpZoneName)
-                for _, groupName in pairs(groups) do
-
-                    if Spearhead.DcsUtil.IsGroupStatic(groupName) == true then
-                        local staticObject = StaticObject.getByName(groupName)
-                        if staticObject then
-                            if staticObject:getCoalition() == 1 then
-                                table.insert(o.red_groups, groupName)
-                                redUnitsPos[groupName] = staticObject:getPoint()
-                            elseif staticObject:getCoalition() == 2 then
-                                table.insert(o.blue_groups, groupName)
-                                blueUnitsPos[groupName] = staticObject:getPoint()
-                            end
-                        end
-                    else
-                        local group = Group.getByName(groupName)
-                        if group then
-                            if group:getCoalition() == 1 then
-                            
-                                table.insert(o.red_groups, groupName)
-
-                                for _, unit in pairs(group:getUnits()) do
-                                    redUnitsPos[unit:getName()] = unit:getPos()
-                                end
-                            elseif group:getCoalition() == 2 then
-                                table.insert(o.blue_groups, groupName)
-
-                                for _, unit in pairs(group:getUnits()) do
-                                    blueUnitsPos[unit:getName()] = unit:getPos()
-                                end
-                            end
-                        end
-                    end
-                    Spearhead.DcsUtil.DestroyGroup(groupName)
-                end
-            end
-            
-            do -- mark cleanable
-                local cleanup_distance = 5
-                for blueUnitName, blueUnitPos in pairs(blueUnitsPos) do
-                    for redUnitName, redUnitPos in pairs(redUnitsPos) do
-                        local distance = Spearhead.Util.VectorDistance(blueUnitPos, redUnitPos)
-                        env.info("distance: " .. tostring(distance))
-                        if distance <= cleanup_distance then
-                            o.cleanup_units[redUnitName] = true
-                        end
-                    end
-                end
-            end
-        end
-
-        o.ActivateRedStage = function(self)
-
-        end
-
-        o.ActivateBlueStage = function(self)
-            
-        end
-
-        return o
-    end
-end
-
-if Spearhead == nil then Spearhead = {} end
-if Spearhead.internal == nil then Spearhead.internal = {} end
-Spearhead.internal.StageFarp = StageFarp
-end --StageFarp.lua
-do --Mission.lua
-
---- A mission Object.
-local Mission = {}
-do -- INIT Mission Class
-
-    local MINIMAL_UNITS_ALIVE_RATIO = 0.20
-
-    local Defaults = {}
-    Defaults.MainMenu = "Missions"
-    Defaults.SelectMenuSubMenus = { Defaults.MainMenu, "Select Mission" }
-    Defaults.ShowMissionSubs = { Defaults.MainMenu }
-
-    local PlayersInMission = {}
-    local MissionType = {
-        UNKNOWN = 0,
-        STRIKE = 1,
-        BAI = 2,
-        DEAD = 3,
-        SAM = 4,
-    }
-
-    do --INIT MISSION TYPE FUNCTIONS
-        ---Parse string to mission type
-        ---@param input string
-        MissionType.Parse = function(input)
-            if input == nil then
-                return Mission.MissionType.UNKNOWN
-            end
-
-            input = string.lower(input)
-            if input == "dead" then return MissionType.DEAD end
-            if input == "strike" then return MissionType.STRIKE end
-            if input == "bai" then return MissionType.BAI end
-            if input == "sam" then return MissionType.SAM end
-            return Mission.MissionType.UNKNOWN
-        end
-
-        ---comment
-        ---@param input number missionType
-        ---@return string text
-        MissionType.toString = function(input)
-            if input == MissionType.DEAD then return "DEAD" end
-            if input == MissionType.STRIKE then return "STRIKE" end
-            if input == MissionType.BAI then return "BAI" end
-            if input == MissionType.SAM then return "SAM" end
-            return "?"
-        end
-    end
-    Mission.MissionType = MissionType
-
-    Mission.MissionState = {
-        NEW = 0,
-        ACTIVE = 1,
-        COMPLETED = 2,
-    }
-
-    ---comment
-    ---@param missionZoneName string missionZoneName
-    ---@param database table db dependency injection
-    ---@return table?
-    function Mission:new(missionZoneName, database, logger)
-        local o = {}
-        setmetatable(o, { __index = self })
-
-        local function ParseGroupName(input)
-            local split_name = Spearhead.Util.split_string(input, "_")
-            local split_length = Spearhead.Util.tableLength(split_name)
-            if Spearhead.Util.startswith(input, "RANDOMMISSION") == true and split_length < 4 then
-                Spearhead.AddMissionEditorWarning("Random Mission with zonename " .. input .. " not in right format")
-                return nil
-            elseif split_length < 3 then
-                Spearhead.AddMissionEditorWarning("Mission with zonename" .. input .. " not in right format")
-                return nil
-            end
-            local type = split_name[2]
-            local parsedType = Mission.MissionType.Parse(type)
-    
-            if parsedType == nil then
-                Spearhead.AddMissionEditorWarning("Mission with zonename '" .. input .. "' has an unsupported type '" .. (type or "nil" ))
-                return nil
-            end
-            local name = split_name[3]
-            return {
-                missionName = name,
-                type = parsedType
-            }
-        end
-
-        local parsed = ParseGroupName(missionZoneName)
-        if parsed == nil then return nil end
-
-        o.missionZoneName = missionZoneName
-        o.database = database
-        o.groupNames = database:getGroupsForMissionZone(missionZoneName)
-        o.name = parsed.missionName
-        o.missionType = parsed.type
-        o.missionTypeDisplayName = Mission.MissionType.toString(o.missionType)
-        o.startingGroups = Spearhead.Util.tableLength(o.groupNames)
-        o.missionState = Mission.MissionState.NEW
-        o.missionbriefing = database:GetDescriptionForMission(missionZoneName)
-        o.startingUnits = 0
-        o.logger = logger
-        o.code = database:GetNewMissionCode()
-
-        o.groupNamesPerUnit = {}
-
-        o.groupUnitAliveDict = {}
-        o.targetAliveStates = {}
-        o.hasSpecificTargets = false
-
-        local CheckStateAsync = function (self, time)
-            self:CheckAndUpdateSelf()
-            return nil
-        end
-
-        o.GetState = function(self)
-            return self.missionState
-        end
-
-        o.OnUnitLost = function(self, object)
-            --[[
-                OnUnit lost event
-            ]]--
-            self.logger:debug("Getting on unit lost event")
-
-            pcall(function ()
-                local name = object:getName()
-                local pos = object:getPoint()
-                local type = object:getDesc().typeName
-                local position = object:getPosition()
-                local heading = math.atan2(position.x.z, position.x.x)
-                local country_id = object:getCountry()
-                Spearhead.classes.persistence.Persistence.UnitKilled(name, pos, heading, type, country_id)
-            end)
-
-            local category = Object.getCategory(object)
-            if category == Object.Category.UNIT then
-                local unitName = object:getName()
-                self.logger:debug("UnitName:" .. unitName)
-                local groupName = self.groupNamesPerUnit[unitName]
-                self.groupUnitAliveDict[groupName][unitName] = false
-
-                if self.targetAliveStates[groupName][unitName] then
-                    self.targetAliveStates[groupName][unitName] = false
-                end
-            elseif category == Object.Category.STATIC  then
-                local name = object:getName()
-                self.groupUnitAliveDict[name][name] = false
-
-                self.logger:debug("Name " .. name)
-
-                if self.targetAliveStates[name][name] then
-                    self.targetAliveStates[name][name] = false
-                end
-            end
-            timer.scheduleFunction(CheckStateAsync, self, timer.getTime() + 1)
-        end
-
-        o.MissionCompleteListeners = {}
-        ---comment
-        ---@param self table
-        ---@param listener table Object that implements "OnMissionComplete(self, mission)"
-        o.AddMissionCompleteListener = function(self, listener)
-            if type(listener) ~= "table" then
-                return
-            end
-            
-            table.insert(self.MissionCompleteListeners, listener)
-        end
-
-        local TriggerMissionComplete = function(self)
-            for _, callable in pairs(self.MissionCompleteListeners) do
-                local succ, err = pcall( function() 
-                    callable:OnMissionComplete(self)
-                end)
-                if err then
-                    self.logger:warn("Error in misstion complete listener:" .. err)
-                end
-            end
-        end
-
-
-        local StartCheckingAndUpdateSelfContinuous = function (self)
-            local CheckAndUpdate = function(self, time)
-                self:CheckAndUpdateSelf(true)
-                if self.missionState == Mission.MissionState.COMPLETED or self.missionState == Mission.MissionState.NEW then
-                    return nil
-                else
-                    return time + 5                end
-            end
-
-            timer.scheduleFunction(CheckAndUpdate, self, timer.getTime() + 5)
-        end
-
-        ---comment
-        ---@param self table
-        ---@param checkUnitHealth boolean?
-        o.CheckAndUpdateSelf = function(self, checkUnitHealth, displayMessageIfDone)
-            if not checkUnitHealth then checkUnitHealth = false end
-            if displayMessageIfDone == nil then displayMessageIfDone = true end
-
-            if checkUnitHealth == true then
-                local function unitAliveState(unitName)
-
-
-                    local staticObject = StaticObject.getByName(unitName)
-                    if staticObject then
-                        if staticObject:isExist() == true then
-                            local life0 = staticObject:getDesc().life
-                            if staticObject:getLife() / life0 < 0.3 then
-                                self.logger:info("exploding unit")
-                                trigger.action.explosion(staticObject:getPoint(), 100)
-                                return false
-                            end
-                            return true
-                        else
-                            return false
-                        end
-                    else
-                        local unit = Unit.getByName(unitName)
-
-                        local alive = unit ~= nil and unit:isExist() == true
-                        if alive == true then
-                            if unit:getLife() / unit:getLife0() < 0.2 then
-                                self.logger:info("exploding unit")
-                                trigger.action.explosion(unit:getPoint(), 100)
-                                return false
-                            end
-                            return true
-                        else
-                            return false
-                        end
-                    end
-                end
-
-                for groupName, unitNameDict in pairs(self.groupUnitAliveDict) do
-                    for unitName, isAlive in pairs(unitNameDict) do
-                        if isAlive == true then
-                            self.groupUnitAliveDict[groupName][unitName] = unitAliveState(unitName)
-                        end
-                    end
-                end
-
-                for groupName, unitNameDict in pairs(self.targetAliveStates) do
-                    for unitName, isAlive in pairs(unitNameDict) do
-                        if isAlive == true then
-                            self.targetAliveStates[groupName][unitName] = unitAliveState(unitName)
-                        end
-                    end
-                end
-            end
-
-            if self.missionState == Mission.MissionState.COMPLETED then
-                return
-            end
-
-            if self.hasSpecificTargets == true then
-                local specificTargetsAlive = false
-                for groupName, unitNameDict in pairs(self.targetAliveStates) do
-                    for unitName, isAlive in pairs(unitNameDict) do
-                        if isAlive == true then
-                            specificTargetsAlive = true
-                        end
-                    end
-                end
-                if specificTargetsAlive == false then
-                    self.missionState = Mission.MissionState.COMPLETED
-                end
-            else
-                local function CountAliveGroups()
-                    local aliveGroups = 0
-
-                    for _, group in pairs(self.groupUnitAliveDict) do
-                        local groupTotal = 0
-                        local groupDeath = 0
-                        for _, isAlive in pairs(group) do
-                            if isAlive ~= true then
-                                groupDeath = groupDeath + 1
-                            end
-                            groupTotal = groupTotal + 1
-                        end
-
-                        local aliveRatio = (groupTotal - groupDeath) / groupTotal
-                        if aliveRatio >= MINIMAL_UNITS_ALIVE_RATIO then
-                            aliveGroups = aliveGroups + 1
-                        end
-                    end
-
-                    return aliveGroups
-                end
-                
-                if self.missionType == Mission.MissionType.STRIKE then --strike targets should normally have TGT targets
-                    if CountAliveGroups() == 0 then
-                        self.missionState = Mission.MissionState.COMPLETED
-                    end
-                elseif self.missionType == Mission.MissionType.BAI then
-                    if CountAliveGroups() == 0 then
-                        self.missionState = Mission.MissionState.COMPLETED
-                    end
-                end
-                --[[
-                    TODO: Other checks for mission complete 
-                ]]
-            end
-
-            if self.missionState == Mission.MissionState.COMPLETED then
-                self.logger:debug("Mission complete " .. self.name)
-
-                if displayMessageIfDone == true then
-                    trigger.action.outText("Mission " .. self.name .. " (" .. self.code .. ") was completed succesfully!", 20)
-                end
-
-                TriggerMissionComplete(self)
-                --Schedule cleanup after 5 minutes of mission complete
-                --timer.scheduleFunction(CleanupDelayedAsync, self, timer.getTime() + 300)
-            end
-        end
-
-        o.spawnedPersisted = false
-        ---Spawns all corpses and alive units as in the persistance state
-        ---@param self table
-        o.SpawnsPersistedState = function(self)
-            if self.spawnedPersisted == true then
-                return 
-            end
-            
-            do --spawn groups
-                for key, groupname in pairs(self.groupNames) do
-                    Spearhead.DcsUtil.SpawnGroupTemplate(groupname)
-                end
-            end 
-
-            for groupName, unitNames in pairs(self.groupUnitAliveDict) do
-                for unitName, isAlive in pairs(unitNames) do
-                    local deathState = Spearhead.classes.persistence.Persistence.UnitDeadState(unitName)
-                    if deathState and deathState.isDead == true then
-                        Spearhead.DcsUtil.DestroyUnit(groupName, unitName)
-                        if deathState.isCleaned == false then
-                            Spearhead.DcsUtil.SpawnCorpse(deathState.country_id, unitName, deathState.type, deathState.pos, deathState.heading)
-                        end
-                        
-                        self.groupUnitAliveDict[groupName][unitName] = false
-                        if self.targetAliveStates[groupName][unitName] == true then
-                            self.targetAliveStates[groupName][unitName] = false
-                        end
-                    end
-                end
-            end
-
-            self.spawnedPersisted = true
-        end
-
-        ---Activates groups for this mission
-        ---@param self table
-        o.Activate = function(self)
-            if self.missionState == Mission.MissionState.ACTIVE then
-                return
-            end
-
-            self.missionState = Mission.MissionState.ACTIVE
-
-            if self.spawnedPersisted == false then
-                do --spawn groups
-                    for key, groupname in pairs(self.groupNames) do
-                        Spearhead.DcsUtil.SpawnGroupTemplate(groupname)
-                    end
-                end
-                
-    
-                do --Check Persistence
-                    local needsChecking = false
-                    for groupName, unitNames in pairs(self.groupUnitAliveDict) do
-                        for unitName, isAlive in pairs(unitNames) do
-                            local deathState = Spearhead.classes.persistence.Persistence.UnitDeadState(unitName)
-                            if deathState and deathState.isDead == true then
-                                Spearhead.DcsUtil.DestroyUnit(groupName, unitName)
-                                if deathState.isCleaned == false then
-                                    Spearhead.DcsUtil.SpawnCorpse(deathState.country_id, unitName, deathState.type, deathState.pos, deathState.heading)
-                                end
-                                
-                                self.groupUnitAliveDict[groupName][unitName] = false
-                                needsChecking = true
-                                if self.targetAliveStates[groupName][unitName] == true then
-                                    self.targetAliveStates[groupName][unitName] = false
-                                end
-                            end
-                        end
-                    end
-    
-                    if needsChecking == true then
-                        self:CheckAndUpdateSelf(false, false)
-                    end
-                end
-            end
-
-            StartCheckingAndUpdateSelfContinuous(self)
-        end
-
-        local ToStateString = function(self)
-            if self.hasSpecificTargets then
-                local dead = 0
-                local total = 0
-                for _, group in pairs(self.targetAliveStates) do
-                    for _, isAlive in pairs(group) do
-                        total = total + 1
-                        if isAlive == false then
-                            dead = dead + 1
-                        end
-                    end
-                end
-                local completionPercentage = math.floor((dead / total) * 100)
-                return "Targets Destroyed: " .. completionPercentage .. "%"
-            else
-                local dead = 0
-                local total = 0
-                for _, group in pairs(self.groupUnitAliveDict) do
-                    for _, isAlive in pairs(group) do
-                        total = total + 1
-                        if isAlive == false then
-                            dead = dead + 1
-                        end
-                    end
-                end
-
-                local completionPercentage = math.floor((dead / total) * 100)
-                return "Targets Destroyed: " .. completionPercentage .. "%"
-            end
-        end
-
-        o.ShowBriefing = function(self, groupId)
-            local stateString = ToStateString(self)
-
-            if self.missionbriefing == nil then self.missionbriefing = "No briefing available" end
-            local text = "Mission [" .. self.code .. "] ".. self.name .. "\n \n" .. self.missionbriefing .. " \n \n" .. stateString
-            trigger.action.outTextForGroup(groupId, text, 30);
-        end
-
-        o.Cleanup = function(self)
-            for key, groupName in pairs(self.groupNames) do
-                Spearhead.DcsUtil.DestroyGroup(groupName)
-            end
-        end
-
-        
-        local Init = function(self)
-            for key, group_name in pairs(self.groupNames) do
-
-
-                self.groupUnitAliveDict[group_name] = {}
-                self.targetAliveStates[group_name] = {}
-
-                if Spearhead.DcsUtil.IsGroupStatic(group_name) then
-                    Spearhead.Events.addOnUnitLostEventListener(group_name, self)
-
-                    self.groupUnitAliveDict[group_name][group_name] = true
-
-                    if Spearhead.Util.startswith(group_name, "TGT_") == true then
-                        self.targetAliveStates[group_name][group_name] = true
-                        self.hasSpecificTargets = true
-                    end
-                else
-                    local group = Group.getByName(group_name)
-                    local isGroupTarget = Spearhead.Util.startswith(group_name, "TGT_")
-
-                    self.startingUnits = self.startingUnits + group:getInitialSize()
-                    for _, unit in pairs(group:getUnits()) do
-                        
-                        local unitName = unit:getName()
-                        self.groupUnitAliveDict[group_name][unitName] = true
-
-                        self.groupNamesPerUnit[unitName] = group_name
-
-                        Spearhead.Events.addOnUnitLostEventListener(unitName, self)
-                        
-                        if isGroupTarget == true or Spearhead.Util.startswith(unitName, "TGT_") == true then
-                            self.targetAliveStates[group_name][unitName] = true
-                            self.hasSpecificTargets = true
-                        end
-
-                        if self.missionType == MissionType.BAI then
-                            if Spearhead.DcsUtil.IsGroupStatic(group_name) ~= true then
-                                self.groupUnitAliveDict[group_name][unitName] = true
-                            end
-                        elseif self.missionType == MissionType.DEAD or self.missionType == MissionType.SAM then
-                            local desc = unit:getDesc()
-                            local attributes = desc.attributes
-                            if attributes["SAM"] == true or attributes["SAM TR"] or attributes["AAA"] then
-                                self.targetAliveStates[group_name][unitName] = true
-                                self.hasSpecificTargets = true
-                            end
-                        else
-                            self.groupUnitAliveDict[group_name][unitName] = true
-                        end
-                    end
-                end
-                Spearhead.DcsUtil.DestroyGroup(group_name)
-            end
-        end
-
-        Init(o)
-        return o;
-    end
-end
-
-if not Spearhead.internal then Spearhead.internal = {} end
-Spearhead.internal.Mission = Mission
-end --Mission.lua
-do --Stage.lua
-
-local Stage = {}
-do --init STAGE DIRECTOR
-
-
-    local stageDrawingId = 0
-
-    ---comment
-    ---@param stagezone_name string
-    ---@param database table
-    ---@param logger table
-    ---@return table?
-    function Stage:new(stagezone_name, database, logger, stageConfig)
-        local o = {}
-        setmetatable(o, { __index = self })
-
-        o.zoneName = stagezone_name
-
-        local split = Spearhead.Util.split_string(stagezone_name, "_")
-        if Spearhead.Util.tableLength(split) < 2 then
-            Spearhead.AddMissionEditorWarning("Stage zone with name " .. stagezone_name .. " does not have a order number or valid format")
-            return nil
-        end
-
-        local orderNumber = tonumber(split[2])
-        if orderNumber == nil then
-            Spearhead.AddMissionEditorWarning("Stage zone with name " .. stagezone_name .. " does not have a valid order number : " .. split[2])
-            return nil
-        end
-
-        o.stageNumber = orderNumber
-        o.isActive = false
-        o.isComplete = false
-        o.database = database
-        o.logger = logger
-        o.db = {}
-        o.db.missionsByCode = {}
-        o.db.missions = {}
-        o.db.sams = {}
-        o.db.blueSams = {}
-        o.db.airbases = {}
-        o.activeStage = -99
-        o.preActivated = false
-        o.stageConfig = stageConfig or {}
-        o.stageDrawingId = stageDrawingId + 1
-    
-
-        stageDrawingId = stageDrawingId + 1
-
-        do --Init Stage
-            logger:info("Initiating new Stage with name: " .. stagezone_name)
-
-            local missionZones = database:getMissionsForStage(stagezone_name)
-            for _, missionZone in pairs(missionZones) do
-                local mission = Spearhead.internal.Mission:new(missionZone, database, logger)
-                if mission then
-                    o.db.missionsByCode[mission.code] = mission
-                    if mission.missionType == Spearhead.internal.Mission.MissionType.SAM then
-                        table.insert(o.db.sams, mission)
-                    else
-                        table.insert(o.db.missions, mission)
-                    end
-                end
-            end
-
-            local randomMissionNames = database:getRandomMissionsForStage(stagezone_name)
-
-            local randomMissionByName = {}
-            for _, missionZoneName in pairs(randomMissionNames) do
-                local mission = Spearhead.internal.Mission:new(missionZoneName, database, logger)
-                if mission then
-                    if randomMissionByName[mission.name] == nil then
-                        randomMissionByName[mission.name] = {}
-                    end
-                    table.insert(randomMissionByName[mission.name], mission)
-                end
-            end
-
-            for _, missions in pairs(randomMissionByName) do
-                local mission = Spearhead.Util.randomFromList(missions)
-                if mission then
-                    o.db.missionsByCode[mission.code] = mission
-                    if mission.missionType == Spearhead.internal.Mission.MissionType.SAM then
-                        table.insert(o.db.sams, mission)
-                    else
-                        table.insert(o.db.missions, mission)
-                    end
-                end
-            end
-
-            local airbaseIds = database:getAirbaseIdsInStage(o.zoneName)
-            if airbaseIds ~= nil and type(airbaseIds) == "table" then
-                for _, airbaseId in pairs(airbaseIds) do
-                    local airbase = Spearhead.internal.StageBase:New(database, logger, airbaseId)
-                    table.insert(o.db.airbases, airbase)
-                end
-            end
-
-            for _, samZoneName in pairs(database:getBlueSamsInStage(o.zoneName)) do
-                local blueSam = Spearhead.classes.stageClasses.BlueSam:new(database, logger, samZoneName)
-                table.insert(o.db.blueSams, blueSam)
-            end
-
-            local miscGroups = database:getMiscGroupsAtStage(o.zoneName)
-            for _, groupName in pairs(miscGroups) do
-                Spearhead.DcsUtil.DestroyGroup(groupName)
-            end
-        end
-
-        o.StageCompleteListeners = {}
-        ---comment
-        ---@param self table
-        ---@param StageCompleteListener table an Object with function onStageCompleted(stage)
-        o.AddStageCompleteListener = function(self, StageCompleteListener)
-
-            if type(StageCompleteListener) ~= "table" then
-                return
-            end
-            table.insert(self.StageCompleteListeners, StageCompleteListener)
-        end
-
-        local triggerStageCompleteListeners = function(self)
-            self.isActive = false
-            for _, callable in pairs(self.StageCompleteListeners) do
-                local succ, err = pcall( function() 
-                    callable:onStageCompleted(self)
-                end)
-                if err then
-                    self.logger:warn("Error in misstion complete listener:" .. err)
-                end
-            end
-        end
-
-        o.IsComplete = function(self)
-            for i, mission in pairs(self.db.missions) do
-                local state = mission:GetState()
-                if state == Spearhead.internal.Mission.MissionState.ACTIVE or state == Spearhead.internal.Mission.MissionState.NEW then
-                    return false
-                end
-            end
-            return true
-        end
-
-        local CheckContinuousAsync = function(self, time)
-            self.logger:info("Checking stage completion for stage: " .. self.zoneName)
-            if self.activeStage == self.stageNumber then
-                return nil -- stop looping if this stage is not even active
-            end
-
-            if self:IsComplete() == true then
-                self.isComplete = true
-                triggerStageCompleteListeners(self)
-                return nil
-            end
-            return time + 60
-        end
-
-        ---Activates all SAMS, Airbase units etc all at once.
-        ---@param self table
-        o.PreActivate = function(self)
-            if self.preActivated == false then
-                self.preActivated = true
-                for key, mission in pairs(self.db.sams) do
-                    if mission and mission.Activate then
-                        mission:Activate()
-                    end
-                end
-                self.logger:debug("Pre-activating stage with airbase groups amount: " .. Spearhead.Util.tableLength(self.db.redAirbasegroups))
-
-                for _, airbase in pairs(self.db.airbases) do
-                    airbase:ActivateRedStage()
-                end
-            end
-
-            if self.activeStage == self.stageNumber then
-                for _, mission in pairs(self.db.sams) do
-                    self:AddCommmandsForMissionToAllPlayers(mission)
-                end
-            end
-        end
-
-        local activateMissionsIfApplicableAsync = function(self)
-            self:ActivateMissionsIfApplicable(self)
-        end
-
-        o.MarkStage = function(self, blue)
-            local fillColor = {1, 0, 0, 0.1}
-            local line ={ 1, 0,0, 1 }
-            if blue == true then
-                fillColor = {0, 0, 1, 0.1}
-                line ={ 0, 0,1, 1 }
-            end
-
-            local zone = Spearhead.DcsUtil.getZoneByName(self.zoneName)
-            if zone and self.stageConfig:isDrawStagesEnabled() == true then
-                self.logger:debug("drawing stage")
-                if zone.zone_type == Spearhead.DcsUtil.ZoneType.Cilinder then
-                    trigger.action.circleToAll(-1, self.stageDrawingId, {x = zone.x, y = 0 , z = zone.z}, zone.radius, {0,0,0,0}, {0,0,0,0},4, true)
-                else
-                    --trigger.action.circleToAll(-1, self.stageDrawingId, {x = zone.x, y = 0 , z = zone.z}, zone.radius, { 1, 0,0, 1 }, {1,0,0,1},4, true)
-                    trigger.action.quadToAll( -1, self.stageDrawingId,  zone.verts[1], zone.verts[2], zone.verts[3],  zone.verts[4], {0,0,0,0}, {0,0,0,0}, 4, true)
-                end
-
-                trigger.action.setMarkupColorFill(self.stageDrawingId, fillColor)
-                trigger.action.setMarkupColor(self.stageDrawingId, line)
-            end
-        end
-        
-        o.ActivateStage = function(self)
-            self.isActive = true;
-
-            pcall(function()
-                self:MarkStage()
-            end)
-
-            self:PreActivate()
-            
-            local miscGroups = self.database:getMiscGroupsAtStage(self.zoneName)
-            self.logger:debug("Activating Misc groups for zone: " .. Spearhead.Util.tableLength(miscGroups))
-            for _, groupName in pairs(miscGroups) do
-                local group = Spearhead.DcsUtil.SpawnGroupTemplate(groupName)
-                if group then
-                    for _, unit in pairs(group:getUnits()) do
-                        local deathState = Spearhead.classes.persistence.Persistence.UnitDeadState(unit:getName())
-
-                        if deathState and deathState.isDead == true then
-                            Spearhead.DcsUtil.DestroyUnit(groupName, unit:getName())
-                            if deathState.isCleaned == false then
-                                Spearhead.DcsUtil.SpawnCorpse(deathState.country_id, unit:getName(), deathState.type, deathState.pos, deathState.heading)
-                            end
-                        else
-                            Spearhead.Events.addOnUnitLostEventListener(unit:getName(), self)
-                        end
-                    end
-                end
-            end
-
-            for _, mission in pairs(self.db.missions) do
-                if mission.missionType == Spearhead.internal.Mission.MissionType.DEAD then
-                    mission:Activate()
-                    self:AddCommmandsForMissionToAllPlayers(mission)
-                end
-            end
-            timer.scheduleFunction(activateMissionsIfApplicableAsync, self, timer.getTime() + 5)
-
-            timer.scheduleFunction(CheckContinuousAsync, self, timer.getTime() + 60)
-        end
-
-        o.ActivateMissionsIfApplicable = function (self)
-            local activeCount = 0
-
-            local availableMissions = {}
-            for _, mission in pairs(self.db.missionsByCode) do
-                local state = mission:GetState()
-
-                if state == Spearhead.internal.Mission.MissionState.ACTIVE then
-                    activeCount = activeCount + 1
-                end
-
-                if state == Spearhead.internal.Mission.MissionState.NEW then
-                    table.insert(availableMissions, mission)
-                end
-            end
-
-            local max = self.stageConfig:getMaxMissionsPerStage() or 10
-
-            local availableMissionsCount = Spearhead.Util.tableLength(availableMissions)
-            if activeCount < max and availableMissionsCount > 0  then
-                for i = activeCount+1, max do
-                    if availableMissionsCount == 0 then
-                        i = max+1 --exits this loop
-                    else
-                        local index = math.random(1, availableMissionsCount)
-                        local mission = table.remove(availableMissions, index)
-                        if mission then
-                            mission:Activate()
-                            self:AddCommmandsForMissionToAllPlayers(mission)
-                            activeCount = activeCount + 1;
-                        end
-                        availableMissionsCount = availableMissionsCount - 1
-                    end
-                end
-            end
-
-        end
-
-        ---Cleans up all missions
-        ---@param self table
-        o.Clean = function(self)
-            for key, mission in pairs(self.db.missions) do
-                mission:Cleanup()
-            end
-
-            for key, samMission in pairs(self.db.sams) do
-                samMission:Cleanup()
-            end
-
-            for _, airbase in pairs(self.db.airbases) do
-                for _, redGroupName in pairs(airbase.redAirbaseGroupNames) do
-                    Spearhead.DcsUtil.DcsUtil.DestroyGroup(redGroupName)
-                end
-            end
-
-            logger:debug("'" .. Spearhead.Util.toString(self.zoneName) .. "' cleaned")
-        end
-
-        local ActivateBlueAsync = function(self)
-            pcall(function()
-                self:MarkStage(true)
-            end)
-
-            for _, blueSam in pairs(self.db.blueSams) do
-                blueSam:Activate()
-            end
-
-            for _, airbase in pairs(self.db.airbases) do
-                airbase:ActivateBlueStage()
-            end
-
-            return nil
-        end
-
-        o.persistedStateSpawned = false
-        ---Sets airfields to blue and spawns friendly farps
-        o.ActivateBlueStage = function(self)
-            logger:debug("Setting stage '" .. Spearhead.Util.toString(self.zoneName) .. "' to blue")
-            
-            for _, mission in pairs(self.db.missions) do
-                mission:SpawnsPersistedState()
-            end
-
-            for _, mission in pairs(self.db.sams) do
-                mission:SpawnsPersistedState()
-            end
-
-            local miscGroups = self.database:getMiscGroupsAtStage(self.zoneName)
-            for _, groupName in pairs(miscGroups) do
-                local group = Spearhead.DcsUtil.SpawnGroupTemplate(groupName)
-                if group then
-                    for _, unit in pairs(group:getUnits()) do
-                        local deathState = Spearhead.classes.persistence.Persistence.UnitDeadState(unit:getName())
-
-                        if deathState and deathState.isDead == true then
-                            Spearhead.DcsUtil.DestroyUnit(groupName, unit:getName())
-                            if deathState.isCleaned == false then
-                                Spearhead.DcsUtil.SpawnCorpse(deathState.country_id, unit:getName(), deathState.type, deathState.pos, deathState.heading)
-                            end
-                        else
-                            Spearhead.Events.addOnUnitLostEventListener(unit:getName(), self)
-                        end
-                    end
-                end
-            end
-
-            timer.scheduleFunction(ActivateBlueAsync, self, timer.getTime() + 3)
-
-        end
-
-        o.OnStatusRequestReceived = function(self, groupId)
-            if self.activeStage ~= self.stageNumber then
-                return
-            end
-
-            trigger.action.outTextForGroup(groupId, "Status Update incoming... ", 3)
-
-            local text = "Mission Status: \n"
-
-            local  totalmissions = 0
-            local completedMissions = 0
-            for _, mission in pairs(self.db.missionsByCode) do
-                totalmissions = totalmissions + 1
-                if mission.missionState == Spearhead.internal.Mission.MissionState.ACTIVE then
-
-                    text = text .. "\n [" .. mission.code .. "] " .. mission.name .. 
-                    " ("  ..  mission.missionTypeDisplayName .. ") \n"
-                end
-               
-                if mission.missionState == Spearhead.internal.Mission.MissionState.COMPLETED then
-                    completedMissions = completedMissions + 1
-                end
-            end
-
-            local completionPercentage = math.floor((completedMissions / totalmissions) * 100)
-            text = text .. " \n Missions Complete: " .. completionPercentage .. "%" 
-
-            self.logger:debug(text)
-            trigger.action.outTextForGroup(groupId, text, 20)
-        end
-
-        o.OnStageNumberChanged = function (self, number)
-
-            if self.activeStage == number then --only activate once for a stage
-                return
-            end
-
-            local previousActive = self.activeStage
-            self.activeStage = number
-            if Spearhead.capInfo.IsCapActiveWhenZoneIsActive(self.zoneName, number) == true then
-                self:PreActivate()
-            end
-
-            if number == self.stageNumber then
-                self:ActivateStage()
-            end
-
-            if previousActive <= self.stageNumber then
-                if number > self.stageNumber then
-                    self:ActivateBlueStage()
-                    self:RemoveAllMissionCommands()
-                end
-            end
-        end
-
-        --- input = { self, groupId, missionCode }
-        local ShowBriefingClicked = function (input)
-            
-            local self = input.self
-            local groupId = input.groupId
-            local missionCode = input.missionCode
-
-            local mission  = self.db.missionsByCode[missionCode]
-            if mission then
-                mission:ShowBriefing(groupId)
-            end
-        end
-        
-        o.RemoveMissionCommands = function (self, mission)
-
-            self.logger:debug("Removing commands for: " .. mission.name)
-
-            local folderName = mission.name .. "(" .. mission.missionTypeDisplayName .. ")"
-            for i = 0, 2 do
-                local players = coalition.getPlayers(i)
-                for _, playerUnit in pairs(players) do
-                    local groupId = playerUnit:getGroup():getID()
-                    missionCommands.removeItemForGroup(groupId, { "Missions", folderName })
-                end
-            end
-        end
-
-        o.OnUnitLost = function(self, object)
-            local unitName = object:getName()
-            local pos = object:getPoint()
-            local type = object:getDesc().typeName
-            local position = object:getPosition()
-            local heading = math.atan2(position.x.z, position.x.x)
-            local country_id = object:getCountry()
-            Spearhead.classes.persistence.Persistence.UnitKilled(unitName, pos, heading, type, country_id)
-        end
-
-        o.RemoveAllMissionCommands = function (self)
-            for _, mission in pairs(self.db.missionsByCode) do
-                self:RemoveMissionCommands(mission)
-            end
-        end
-
-        o.AddCommandsForMissionToGroup = function (self, groupId, mission)
-            local folderName = mission.name .. "(" .. mission.missionTypeDisplayName .. ")"
-            missionCommands.addSubMenuForGroup(groupId, folderName, { "Missions"} )
-            missionCommands.addCommandForGroup(groupId, "Show Briefing", { "Missions", folderName }, ShowBriefingClicked, { self = self, groupId = groupId, missionCode = mission.code })
-        end
-
-        o.AddCommmandsForMissionToAllPlayers = function(self, mission)
-            for i = 0, 2 do
-                local players = coalition.getPlayers(i)
-                for _, playerUnit in pairs(players) do
-                    local groupId = playerUnit:getGroup():getID()
-                    self:AddCommandsForMissionToGroup(groupId, mission)
-                end
-            end
-        end
-        
-        o.OnPlayerEntersUnit = function (self, unit)
-            if self.activeStage == self.stageNumber then
-                local groupId = unit:getGroup():getID()
-                for _, mission in pairs(self.db.missionsByCode) do
-                    if mission.missionState == Spearhead.internal.Mission.MissionState.ACTIVE then
-                        self:AddCommandsForMissionToGroup(groupId, mission)
-                    end
-                end
-            end
-        end
-
-        local removeMissionCommandsDelayed = function(input)
-            local self = input.self
-            local mission = input.mission
-            self:RemoveMissionCommands(mission)
-        end
-        
-        o.OnMissionComplete = function(self, mission)
-            timer.scheduleFunction(removeMissionCommandsDelayed, { self = self, mission = mission}, timer.getTime() + 20)
-
-            if(self:IsComplete()) then
-                timer.scheduleFunction(triggerStageCompleteListeners, self, timer.getTime() + 15)
-            else
-                timer.scheduleFunction(activateMissionsIfApplicableAsync, self, timer.getTime() + 10)
-            end
-        end
-
-        for _, mission in pairs(o.db.missionsByCode) do
-            mission:AddMissionCompleteListener(o)
-        end
-
-        Spearhead.Events.AddOnPlayerEnterUnitListener(o)
-        Spearhead.Events.AddOnStatusRequestReceivedListener(o)
-        Spearhead.Events.AddStageNumberChangedListener(o)
-        return o
-    end
-end
-
-if not Spearhead.internal then Spearhead.internal = {} end
-Spearhead.internal.Stage = Stage
-end --Stage.lua
-do --StageBase.lua
-
-
-
-local StageBase = {}
-
-do
-    function StageBase:New(databaseManager, logger, airbaseId)
-
-        local o = {}
-        setmetatable(o, { __index = self })
-    
-        o.db = databaseManager
-        o.logger = logger
-
-        o.red_groups = {}
-        o.blue_groups = {}
-        o.cleanup_units = {}
-
-        o.airbase = Spearhead.DcsUtil.getAirbaseById(airbaseId)
-        o.initialSide = Spearhead.DcsUtil.getStartingCoalition(airbaseId)
-
-        do --init
-            local redUnitsPos = {}
-            local blueUnitsPos = {}
-
-            do -- fill tables
-              local redGroups = databaseManager:getRedGroupsAtAirbase(airbaseId)
-              if redGroups then
-                for _, groupName in pairs(redGroups) do
-                    
-                    table.insert(o.red_groups, groupName)
-
-                    if Spearhead.DcsUtil.IsGroupStatic(groupName) then
-                        local staticObject = StaticObject.getByName(groupName)
-                        redUnitsPos[staticObject:getName()] = staticObject:getPoint()
-                    else
-                        local group = Group.getByName(groupName)
-                        if group then
-                            for _, unit in pairs(group:getUnits()) do
-                                redUnitsPos[unit:getName()] = unit:getPoint()
-                            end
-                        end
-                        Spearhead.DcsUtil.DestroyGroup(groupName)
-                    end
-                end
-              end
-
-              local blueGroups = databaseManager:getBlueGroupsAtAirbase(airbaseId)
-              if blueGroups then
-                for _, groupName in pairs(blueGroups) do
-                    
-                    table.insert(o.blue_groups, groupName)
-
-                    if Spearhead.DcsUtil.IsGroupStatic(groupName) then
-                        local staticObject = StaticObject.getByName(groupName)
-                        blueUnitsPos[staticObject:getName()] = staticObject:getPoint()
-                    else
-                        local group = Group.getByName(groupName)
-                        if group then
-                            for _, unit in pairs(group:getUnits()) do
-                                blueUnitsPos[unit:getName()] = unit:getPoint()
-                            end
-                        end
-                        Spearhead.DcsUtil.DestroyGroup(groupName)
-                    end
-                end
-              end
-            end
-
-            do -- check cleanup requirements
-                -- Checks is any of the units are withing range (5m) of another unit. 
-                -- If so, make sure to add them to the cleanup list.
-            
-                local cleanup_distance = 5
-
-                for blueUnitName, blueUnitPos in pairs(blueUnitsPos) do
-                    for redUnitName, redUnitPos in pairs(redUnitsPos) do
-                        local distance = Spearhead.Util.VectorDistance(blueUnitPos, redUnitPos)
-                        env.info("distance: " .. tostring(distance))
-                        if distance <= cleanup_distance then
-                            o.cleanup_units[redUnitName] = true
-                        end
-                    end
-                end
-            end
-        end
-
-        local spawnRedUnits = function(self)
-            for _, groupName in pairs(self.red_groups) do
-                local group = Spearhead.DcsUtil.SpawnGroupTemplate(groupName)
-
-                if group then
-                    for _, unit in pairs(group:getUnits()) do
-                        local unitName = unit:getName()
-                        local deathState = Spearhead.classes.persistence.Persistence.UnitDeadState(unitName)
-                        if deathState and deathState.isDead == true then
-                            Spearhead.DcsUtil.DestroyUnit(groupName, unit:getName())
-                        else
-                            Spearhead.Events.addOnUnitLostEventListener(unit:getName(), self)
-                        end
-                    end
-                end
-            end
-        end
-
-        local cleanRedUnit = function(self)
-            for _, groupName in pairs(self.red_groups) do
-                if Spearhead.DcsUtil.IsGroupStatic(groupName) then
-                    Spearhead.DcsUtil.SpawnGroupTemplate(groupName)
-                    local staticObject = StaticObject.getByName(groupName)
-
-                    if staticObject then
-                        if self.cleanup_units[groupName] then
-                            staticObject:destroy()
-                        else
-                            local unitName = staticObject:getName()
-                            local deathState = Spearhead.classes.persistence.Persistence.UnitDeadState(unitName)
-    
-                            if deathState and deathState.isDead == true then
-                                Spearhead.DcsUtil.DestroyUnit(unitName, unitName)
-    
-                                if deathState.isCleaned == false then
-                                    Spearhead.DcsUtil.SpawnCorpse(deathState.country_id, unitName, deathState.type, deathState.pos, deathState.heading)
-                                end
-                            else
-                                Spearhead.DcsUtil.DestroyUnit(groupName, unitName)
-                            end
-                        end
-                    end
-                else
-                    local group = Spearhead.DcsUtil.SpawnGroupTemplate(groupName)
-                    if group then
-                        for _, unit in pairs(group:getUnits()) do
-                            local unitName = unit:getName()
-
-                            if self.cleanup_units[unitName] == true then
-                                Spearhead.DcsUtil.DestroyUnit(groupName, unitName)
-                            else
-                                local deathState = Spearhead.classes.persistence.Persistence.UnitDeadState(unitName)
-                                if deathState and deathState.isDead == true then
-                                    Spearhead.DcsUtil.DestroyUnit(groupName, unitName)
-        
-                                    if deathState.isCleaned == false then
-                                        Spearhead.DcsUtil.SpawnCorpse(deathState.country_id, unitName, deathState.type, deathState.pos, deathState.heading)
-                                    end
-                                else
-                                    Spearhead.DcsUtil.DestroyUnit(groupName, unitName)
-                                end
-                            end
-                        end
-                    end
-                end
-            end
-        end
-
-        local spawnBlueUnits = function(self)
-
-            for _, groupName in pairs(self.blue_groups) do
-                if Spearhead.DcsUtil.IsGroupStatic(groupName) then
-                    Spearhead.DcsUtil.SpawnGroupTemplate(groupName)
-
-                    local staticObject = StaticObject.getByName(groupName)
-                    local unitName = staticObject:getName()
-                    local deathState = Spearhead.classes.persistence.Persistence.UnitDeadState(unitName)
-
-                    if deathState and deathState.isDead == true then
-                        Spearhead.DcsUtil.DestroyUnit(unitName, unitName)
-
-                        if deathState.isCleaned == false then
-                            Spearhead.DcsUtil.SpawnCorpse(deathState.country_id, unitName, deathState.type, deathState.pos, deathState.heading)
-                        end
-                    else
-                        Spearhead.Events.addOnUnitLostEventListener(unitName, self)
-                    end
-                else
-                    local group = Spearhead.DcsUtil.SpawnGroupTemplate(groupName)
-                    if group then
-                        for _, unit in pairs(group:getUnits()) do
-                            local unitName = unit:getName()
-                            local deathState = Spearhead.classes.persistence.Persistence.UnitDeadState(unitName)
-                            if deathState and deathState.isDead == true then
-                                Spearhead.DcsUtil.DestroyUnit(groupName, unitName)
-
-                                if deathState.isCleaned == false then
-                                    Spearhead.DcsUtil.SpawnCorpse(deathState.country_id, unitName, deathState.type, deathState.pos, deathState.heading)
-                                end
-                            else
-                                Spearhead.Events.addOnUnitLostEventListener(unitName, self)
-                            end
-                        end
-                    end
-                end
-            end
-        end
-
-        o.ActivateRedStage = function(self)
-            if self.initialSide == 2 then
-                self.airbase:setCoalition(1)
-                self.airbase:autoCapture(false)
-            end
-            timer.scheduleFunction(spawnRedUnits, self, timer.getTime() + 3)
-        end
-
-        o.OnUnitLost = function (self, object)
-            local unitName = object:getName()
-            local pos = object:getPoint()
-            local type = object:getDesc().typeName
-            local position = object:getPosition()
-            local heading = math.atan2(position.x.z, position.x.x)
-            local country_id = object:getCountry()
-            Spearhead.classes.persistence.Persistence.UnitKilled(unitName, pos, heading, type, country_id)
-        end
-
-        o.ActivateBlueStage = function(self)
-            if self.initialSide == 2 then
-                self.airbase:setCoalition(2)
-            end
-
-            cleanRedUnit(self)
-            timer.scheduleFunction(spawnBlueUnits, self, timer.getTime() + 3)
-        end
-
-        return o
-    end
-
-end
-
-if Spearhead == nil then Spearhead = {} end
-if Spearhead.internal == nil then Spearhead.internal = {} end
-Spearhead.internal.StageBase = StageBase
-
-
-
-
-end --StageBase.lua
 do --GlobalStageManager.lua
 
 
 local StagesByName = {}
+
+---@type table<string, Array<Stage>>
 local StagesByIndex = {}
+
+---@type table<string, Array<Stage>>
+local SideStageByIndex = {}
+
+local currentStage = -99
 
 
 GlobalStageManager = {}
+
+---comment
+---@param database Database
+---@param stageConfig StageConfig
+---@return nil
 function GlobalStageManager:NewAndStart(database, stageConfig)
     local logger = Spearhead.LoggerTemplate:new("StageManager", stageConfig.logLevel)
+    logger:info("Using Stage Log Level: " .. stageConfig.logLevel)
     local o = {}
     setmetatable(o, { __index = self })
 
     o.logger = logger
-
-    o.onStageCompleted = function(self, stage) 
-        local stageNumber = tostring(stage.stageNumber)
-        local anyActive = false
-        for _, stage in pairs(StagesByIndex[stageNumber] or {}) do
-            if stage.isActive then anyActive = true end
-        end
-
-        if anyActive == false and stageConfig:isAutoStages() == true then
-            Spearhead.Events.PublishStageNumberChanged(tonumber(stageNumber) + 1)
-        end
-
+    if stageConfig.isAutoStages ~= true then
+        logger:warn("Spearhead will not automatically progress stages due to the given settings. If you manually have implemented this, please ignore this message")
     end
 
+    ---@type OnStageChangedListener
+    local OnStageNumberChangedListener = {
+        OnStageNumberChanged = function (self, number)
+            currentStage = number
+        end
+    }
+
+    Spearhead.Events.AddStageNumberChangedListener(OnStageNumberChangedListener)
+
+    ---@type StageCompleteListener
+    local OnStageCompleteListener = {
+        OnStageComplete = function(self, stage)
+            logger:debug("Receiving stage complete event from: " .. stage.zoneName)
+
+            local anyIncomplete = false
+            logger:debug("Checking stages for index: " .. tostring(currentStage))
+            for index, stage in pairs(StagesByIndex[tostring(currentStage)]) do
+                if stage:IsComplete() == false then
+                    anyIncomplete = true
+                    logger:debug("Need to wait for Stage " .. stage.zoneName .. " to be completed")
+                else
+                    logger:debug("Stage verified to be completed:  " .. stage.zoneName)
+                end
+            end
+
+            if anyIncomplete == false and stageConfig.isAutoStages == true then
+                logger:debug("Setting next stage to: " .. tostring(currentStage + 1))
+                Spearhead.Events.PublishStageNumberChanged(currentStage + 1)
+            end
+        end
+    }
+
     for _, stageName in pairs(database:getStagezoneNames()) do
+        local valid = true
 
+        local split = Spearhead.Util.split_string(stageName, "_")
+        if Spearhead.Util.tableLength(split) < 2 then
+            Spearhead.AddMissionEditorWarning("Stage zone with name " .. stageName .. " does not have a order number or valid format")
+            valid = false
+        end
+
+        if Spearhead.Util.tableLength(split) < 3 then
+            Spearhead.AddMissionEditorWarning("Stage zone with name " .. stageName .. " does not have a stage name")
+            valid = false
+        end
+
+        local orderNumber = nil 
+        local isSideStage = false
+        if valid == true then
+            local orderNumberString = string.lower(split[2])
+            if Spearhead.Util.startswith(orderNumberString, "x") == true then
+                isSideStage = true
+
+                local orderNumberString = string.gsub(orderNumberString, "x", "")
+                orderNumber = tonumber(orderNumberString)
+            else
+                orderNumber = tonumber(split[2])
+            end
+
+            if orderNumber == nil then
+                Spearhead.AddMissionEditorWarning("Stage zone with name " .. stageName .. " does not have a valid order number : " .. split[2])
+                valid = false
+            end
+        end
+            
+        local stageDisplayName = split[3]
         local stagelogger = Spearhead.LoggerTemplate:new(stageName, stageConfig.logLevel)
-        local stage = Spearhead.internal.Stage:new(stageName, database, stagelogger, stageConfig)
+        if valid == true and orderNumber then
 
-        if stage then
-            stage:AddStageCompleteListener(o);
-            StagesByName[stageName]  = stage
-            local indexString = tostring(stage.stageNumber)
-            if StagesByIndex[indexString] == nil then StagesByIndex[indexString] = {} end
-            table.insert(StagesByIndex[indexString], stage)
-            logger:info("Initiated " .. Spearhead.Util.tableLength(StagesByName) .. " airbases for cap")
+            ---@type StageInitData
+            local initData = {
+                stageDisplayName = stageDisplayName,
+                stageNumber =  orderNumber,
+                stageZoneName = stageName,
+            }
+
+            if isSideStage == true then
+                local stage = Spearhead.classes.stageClasses.Stages.ExtraStage.New(database, stageConfig, stagelogger, initData)
+                stage:AddStageCompleteListener(OnStageCompleteListener)
+
+                if SideStageByIndex[tostring(orderNumber)] == nil then SideStageByIndex[tostring(orderNumber)] = {} end
+                table.insert(SideStageByIndex[tostring(orderNumber)], stage) 
+            else 
+                local stage = Spearhead.classes.stageClasses.Stages.PrimaryStage.New(database, stageConfig, stagelogger, initData)
+                stage:AddStageCompleteListener(OnStageCompleteListener)
+                
+                if StagesByIndex[tostring(orderNumber)] == nil then StagesByIndex[tostring(orderNumber)] = {} end
+                table.insert(StagesByIndex[tostring(orderNumber)], stage) 
+            end 
         end
     end
 
@@ -5118,7 +3877,7 @@ GlobalStageManager.isStageComplete = function (stageNumber)
     if StagesByIndex[stageIndex] == nil then return nil end
     
     for _, stage in ipairs(StagesByIndex[stageIndex]) do
-        if stage.isComplete == false then
+        if stage:IsComplete() == false then
             return false
         end
     end
@@ -5130,130 +3889,1482 @@ if not Spearhead.internal then Spearhead.internal = {} end
 Spearhead.internal.GlobalStageManager = GlobalStageManager
 
 end --GlobalStageManager.lua
-do --BlueSam.lua
+do --StageBase.lua
 
 
-local BlueSam = {}
+---@class StageBase 
+---@field private _database Database
+---@field private _logger Logger
+---@field private _red_groups Array<SpearheadGroup>
+---@field private _blue_groups Array<SpearheadGroup>
+---@field private _cleanup_units table<string, boolean>
+---@field private _airbase table?
+---@field private _initialSide number?
+local StageBase = {}
 
-do
-    function BlueSam:new(database, logger, zoneName)
+---comment
+---@param databaseManager table
+---@param logger table
+---@param airbaseId integer
+---@return StageBase
+function StageBase.New(databaseManager, logger, airbaseId)
 
-        local o = {}
-        setmetatable(o, { __index = self})
+    StageBase.__index = StageBase
+    local self = setmetatable({}, StageBase)
 
-        o.database = database
-        o.logger = logger
-        o.zoneName = zoneName
+    self._database = databaseManager
+    self._logger = logger
 
-        o.redGroups = {}
-        o.blueGroups = {}
-        o.cleanupUnits = {}
+    self._red_groups = {}
+    self._blue_groups = {}
+    self._cleanup_units = {}
 
-        do
-            local groups = database:getBlueSamGroupsInZone(zoneName)
+    self._airbase = Spearhead.DcsUtil.getAirbaseById(airbaseId)
+    self._initialSide = Spearhead.DcsUtil.getStartingCoalition(airbaseId)
 
-            local blueUnitsPos = {}
-            local redUnitsPos = {}
+    do --init
+        local redUnitsPos = {}
+        local blueUnitsPos = {}
 
-            for _, groupName in pairs(groups) do
-                    if Spearhead.DcsUtil.IsGroupStatic(groupName) then
-                        local staticObject = StaticObject.getByName(groupName)
+        do -- fill tables
+            local redGroups = databaseManager:getRedGroupsAtAirbase(airbaseId)
+            if redGroups then
+            for _, groupName in pairs(redGroups) do
+                local shGroup = Spearhead.classes.stageClasses.Groups.SpearheadGroup.New(groupName)
+                table.insert(self._red_groups, shGroup)
 
-                        if staticObject:getCoalition() == 1 then
-                            table.insert(o.redGroups, groupName)
-                            redUnitsPos[staticObject:getName()] = staticObject:getPoint()
-                        end
+                for _, unit in shGroup:GetUnits() do
+                    redUnitsPos[unit:getName()] = unit:getPoint()
+                end
 
-                        if staticObject:getCoalition() == 2 then
-                            table.insert(o.blueGroups, groupName)
-                            blueUnitsPos[staticObject:getName()] = staticObject:getPoint()
-                        end
-                    else
-                        local group = Group.getByName(groupName)
-                        if group:getCoalition() == 1 then
-                            table.insert(o.redGroups, groupName)
-                        elseif group:getCoalition() == 2 then
-                            table.insert(o.blueGroups, groupName)
-                        end
-
-                        for _, unit in pairs(group:getUnits()) do
-                            if group:getCoalition() == 1 then
-                                table.insert(blueUnitsPos, unit:getPoint())
-                            elseif group:getCoalition() == 2 then
-                                table.insert(redUnitsPos, unit:getPoint())
-                            end
-                        end
-                    end
-                    Spearhead.DcsUtil.DestroyGroup(groupName)
+                shGroup:Destroy()
+            end
             end
 
-            do -- check cleanup requirements
-                -- Checks is any of the units are withing range (5m) of another unit. 
-                -- If so, make sure to add them to the cleanup list.
-            
-                local cleanup_distance = 5
-                for blueUnitName, blueUnitPos in pairs(blueUnitsPos) do
-                    for redUnitName, redUnitPos in pairs(redUnitsPos) do
-                        local distance = Spearhead.Util.VectorDistance(blueUnitPos, redUnitPos)
-                        env.info("distance: " .. tostring(distance))
-                        if distance <= cleanup_distance then
-                            o.cleanup_units[redUnitName] = true
-                        end
+            local blueGroups = databaseManager:getBlueGroupsAtAirbase(airbaseId)
+            if blueGroups then
+            for _, groupName in pairs(blueGroups) do
+                local shGroup = Spearhead.classes.stageClasses.Groups.SpearheadGroup.New(groupName)
+                table.insert(self._blue_groups, shGroup)
+
+                for _, unit in shGroup:GetUnits() do
+                    blueUnitsPos[unit:getName()] = unit:getPoint()
+                end
+
+                shGroup:Destroy()
+            end
+            end
+        end
+
+        do -- check cleanup requirements
+            -- Checks is any of the units are withing range (5m) of another unit. 
+            -- If so, make sure to add them to the cleanup list.
+        
+            local cleanup_distance = 5
+
+            for blueUnitName, blueUnitPos in pairs(blueUnitsPos) do
+                for redUnitName, redUnitPos in pairs(redUnitsPos) do
+                    local distance = Spearhead.Util.VectorDistance(blueUnitPos, redUnitPos)
+                    env.info("distance: " .. tostring(distance))
+                    if distance <= cleanup_distance then
+                        self._cleanup_units[redUnitName] = true
                     end
                 end
             end
         end
-
-        o.Activate = function(self)
-            for unitName, needsCleanup in pairs(self.cleanupUnits) do
-                if needsCleanup == true then
-                    Spearhead.DcsUtil.DestroyUnit(unitName)
-                else
-                    local deathState = Spearhead.classes.persistence.Persistence.UnitDeadState(unitName)
-                    if deathState and deathState.isDead == true then
-                        Spearhead.DcsUtil.SpawnCorpse(deathState.country_id, unitName, deathState.type, deathState.pos, deathState.heading)
-                    end
-                end
-            end
-
-            for _, blueGroup in pairs(self.blueGroups) do
-                if Spearhead.DcsUtil.IsGroupStatic(blueGroup) then
-                    Spearhead.DcsUtil.SpawnGroupTemplate(blueGroup)
-                    local staticObject = StaticObject.getByName(blueGroup)
-
-                    if staticObject then
-                        local deathState = Spearhead.classes.persistence.Persistence.UnitDeadState(blueGroup)
-                        if deathState and deathState.isDead == true then
-                            Spearhead.DcsUtil.DestroyUnit(blueGroup)
-                            Spearhead.DcsUtil.SpawnCorpse(deathState.country_id, blueGroup, deathState.type, deathState.pos, deathState.heading)
-                        end
-                    end
-                else
-                    local group = Spearhead.DcsUtil.SpawnGroupTemplate(blueGroup)
-                    if group then
-                        for _, unit in pairs(group:getUnits()) do
-                            local unitName = unit:getName()
-                            local deathState = Spearhead.classes.persistence.Persistence.UnitDeadState(unitName)
-
-                            if deathState and deathState.isDead == true then
-                                Spearhead.DcsUtil.DestroyUnit(unitName)
-                                Spearhead.DcsUtil.SpawnCorpse(deathState.country_id, unitName, deathState.type, deathState.pos, deathState.heading)
-                            end
-                        end
-                    end
-                end
-            end
-        end
-
-        return o
     end
+
+    return self
+end  
+
+---@private
+function StageBase:SpawnRedUnits()
+
+    ---comment
+    ---@param groups Array<SpearheadGroup>
+    local spawnAsync = function(groups)
+        for _, group in pairs(groups) do
+            group:Spawn()
+        end
+
+        return nil
+    end
+
+    timer.scheduleFunction(spawnAsync, self._red_groups, timer.getTime() + 3)
 end
+
+---@private
+function StageBase:CleanRedUnits()
+    for _, value in pairs(self._red_groups) do
+        value:SpawnCorpsesOnly()
+    end
+
+    for _, unitName in pairs(self._cleanup_units) do
+        Spearhead.DcsUtil.DestroyUnit(unitName)
+        Spearhead.DcsUtil.CleanCorpse(unitName)
+    end
+
+end
+
+---@private
+function StageBase:SpawnBlueUnits()
+
+    ---comment
+    ---@param groups Array<SpearheadGroup>
+    local spawnAsync = function(groups)
+        for _, group in pairs(groups) do
+            group:Spawn()
+        end
+
+        return nil
+    end
+
+    timer.scheduleFunction(spawnAsync, self._blue_groups, timer.getTime() + 3)
+end
+
+function StageBase:ActivateRedStage()
+    if self._initialSide == 2 and self._airbase then
+        self._airbase:setCoalition(1)
+        self._airbase:autoCapture(false)
+    end
+    self:SpawnRedUnits()
+end
+
+function StageBase:ActivateBlueStage()
+    if self._initialSide == 2 and self._airbase then
+        self._airbase:setCoalition(2)
+    end
+
+    self:CleanRedUnits()
+    self:SpawnBlueUnits()
+
+end
+
+
 if Spearhead == nil then Spearhead = {} end
 if Spearhead.classes == nil then Spearhead.classes = {} end
 if Spearhead.classes.stageClasses == nil then Spearhead.classes.stageClasses = {} end
-Spearhead.classes.stageClasses.BlueSam = BlueSam
+if Spearhead.classes.stageClasses.SpecialZones == nil then Spearhead.classes.stageClasses.SpecialZones = {} end
+Spearhead.classes.stageClasses.SpecialZones.StageBase = StageBase
+
+
+
+
+end --StageBase.lua
+do --BlueSam.lua
+
+---@class BlueSam
+---@field Activate fun(self: BlueSam)
+---@field private _database Database
+---@field private _logger Logger
+---@field private _zoneName string
+---@field private _blueGroups Array<SpearheadGroup>
+---@field private _cleanupUnits table<string, boolean>
+local BlueSam = {}
+
+function BlueSam.New(database, logger, zoneName)
+    BlueSam.__index = BlueSam
+    local self = setmetatable({}, BlueSam)
+
+    self._database = database
+    self._logger = logger
+    self._zoneName = zoneName
+
+    self._blueGroups = {}
+    self._cleanupUnits = {}
+
+    do
+        local groups = database:getBlueSamGroupsInZone(zoneName)
+
+        local blueUnitsPos = {}
+        local redUnitsPos = {}
+
+        for _, groupName in pairs(groups) do
+            local SpearheadGroup = Spearhead.classes.stageClasses.Groups.SpearheadGroup.New(groupName)
+            if SpearheadGroup then
+                
+                if SpearheadGroup:GetCoalition() == 2 then
+                    table.insert(self._blueGroups, SpearheadGroup)
+                end
+
+
+                for _, unit in pairs(SpearheadGroup:GetUnits()) do
+                    if SpearheadGroup:GetCoalition() == 1 then
+                        table.insert(blueUnitsPos, unit:getPoint())
+                    elseif SpearheadGroup:GetCoalition() == 2 then
+                        table.insert(redUnitsPos, unit:getPoint())
+                    end
+                end
+
+            end
+            SpearheadGroup:Destroy()
+        end
+
+        do -- check cleanup requirements
+            -- Checks is any of the units are withing range (5m) of another unit. 
+            -- If so, make sure to add them to the cleanup list.
+        
+            local cleanup_distance = 5
+            for blueUnitName, blueUnitPos in pairs(blueUnitsPos) do
+                for redUnitName, redUnitPos in pairs(redUnitsPos) do
+                    local distance = Spearhead.Util.VectorDistance(blueUnitPos, redUnitPos)
+                    env.info("distance: " .. tostring(distance))
+                    if distance <= cleanup_distance then
+                        self._cleanupUnits[redUnitName] = true
+                    end
+                end
+            end
+        end
+    end
+
+    return self
+end
+
+function BlueSam:Activate()
+    for unitName, needsCleanup in pairs(self._cleanupUnits) do
+        if needsCleanup == true then
+            Spearhead.DcsUtil.DestroyUnit(unitName)
+        else
+            local deathState = Spearhead.classes.persistence.Persistence.UnitDeadState(unitName)
+            if deathState and deathState.isDead == true then
+                Spearhead.DcsUtil.SpawnCorpse(deathState.country_id, unitName, deathState.type, deathState.pos, deathState.heading)
+            end
+        end
+    end
+
+    for _, group in pairs(self._blueGroups) do
+        group:Spawn()
+    end
+end
+
+
+if Spearhead == nil then Spearhead = {} end
+if Spearhead.classes == nil then Spearhead.classes = {} end
+if Spearhead.classes.stageClasses == nil then Spearhead.classes.stageClasses = {} end
+if Spearhead.classes.stageClasses.SpecialZones == nil then Spearhead.classes.stageClasses.SpecialZones = {} end
+Spearhead.classes.stageClasses.Missions.SpecialZones = BlueSam
 
 end --BlueSam.lua
+do --SpearheadGroup.lua
+
+
+
+---@class SpearheadGroup : OnUnitLostListener
+---@field groupName string
+---@field private isStatic boolean
+---@field private isSpawned boolean
+local SpearheadGroup = {}
+
+function SpearheadGroup.New(groupName)
+
+    SpearheadGroup.__index = SpearheadGroup
+
+    local o = {}
+    local self = setmetatable(o, SpearheadGroup)
+
+    self.isStatic = Spearhead.DcsUtil.IsGroupStatic(groupName) == true
+    self.groupName = groupName
+    self.isSpawned = false
+    return self
+end
+
+function SpearheadGroup:SpawnCorpsesOnly()
+
+    if self.isSpawned == true then return end
+
+    local group = Spearhead.DcsUtil.SpawnGroupTemplate(self.groupName)
+    if group then
+        for _, unit in pairs(group:getUnits()) do
+            local deathState = Spearhead.classes.persistence.Persistence.UnitDeadState(unit:getName())
+
+            if deathState and deathState.isDead == true then
+                Spearhead.DcsUtil.DestroyUnit(self.groupName, unit:getName())
+                Spearhead.DcsUtil.SpawnCorpse(deathState.country_id, unit:getName(), deathState.type, deathState.pos, deathState.heading)
+            end
+        end
+    end
+
+    self.isSpawned = true
+
+end
+
+function SpearheadGroup:Spawn()
+
+    if self.isSpawned == true then return end
+
+    local group = Spearhead.DcsUtil.SpawnGroupTemplate(self.groupName)
+    if group then
+        for _, unit in pairs(group:getUnits()) do
+            local deathState = Spearhead.classes.persistence.Persistence.UnitDeadState(unit:getName())
+
+            if deathState and deathState.isDead == true then
+                Spearhead.DcsUtil.DestroyUnit(self.groupName, unit:getName())
+                Spearhead.DcsUtil.SpawnCorpse(deathState.country_id, unit:getName(), deathState.type, deathState.pos, deathState.heading)
+            else
+                Spearhead.Events.addOnUnitLostEventListener(unit:getName(), self)
+            end
+
+            Spearhead.Events.addOnUnitLostEventListener(unit:getName(), self)
+        end
+    end
+
+    self.isSpawned = true
+end
+
+function SpearheadGroup:Destroy()
+    self.isSpawned = false
+    Spearhead.DcsUtil.DestroyGroup(self.groupName)
+end
+
+---comment
+---@return integer
+function SpearheadGroup:GetCoalition()
+    if self.isStatic == true then
+        local object = StaticObject.getByName(self.groupName)
+        return object:getCoalition()
+    else
+        local group = Group.getByName(self.groupName)
+        return group:getCoalition()
+    end
+end
+
+function SpearheadGroup:OnUnitLost(object)
+    local name = object:getName()
+    local pos = object:getPoint()
+    local type = object:getDesc().typeName
+    local position = object:getPosition()
+    local heading = math.atan2(position.x.z, position.x.x)
+    local country_id = object:getCountry()
+    Spearhead.classes.persistence.Persistence.UnitKilled(name, pos, heading, type, country_id)
+end
+
+---comment
+---@return table result list of objects
+function SpearheadGroup:GetUnits()
+
+    local result = {}
+    if self.isStatic == true then
+        local staticObject = StaticObject.getByName(self.groupName)
+        if staticObject then 
+            table.insert(result, staticObject)
+        end
+    else
+        local group = Group.getByName(self.groupName)
+        for _, unit in pairs(group:getUnits()) do
+            table.insert(result, unit)
+        end 
+    end
+    return result
+end
+
+if not Spearhead.classes then Spearhead.classes = {} end
+if not Spearhead.classes.stageClasses then Spearhead.classes.stageClasses = {} end
+if not Spearhead.classes.stageClasses.Groups then Spearhead.classes.stageClasses.Groups = {} end
+Spearhead.classes.stageClasses.Groups.SpearheadGroup = SpearheadGroup
+
+end --SpearheadGroup.lua
+do --MissionCommandsHelper.lua
+
+local MissionCommandsHelper = {}
+do
+    ---@type table<string, Mission>
+    local missionsByCode = {}
+
+    ---@type table<string, boolean>
+    local enabledByCode = {}
+
+    local updateNeeded = false
+
+    ---Add a mission to the F10 commands menu
+    ---@param mission Mission
+    MissionCommandsHelper.AddMissionToCommands = function (mission)
+        missionsByCode[tostring(mission.code)] = mission
+        enabledByCode[tostring(mission.code)] = true
+        updateNeeded = true
+    end
+
+    ---Removes a mission from the F10 commands menu
+    ---@param mission Mission
+    MissionCommandsHelper.RemoveMissionToCommands = function (mission)
+        enabledByCode[tostring(mission.code)] = false
+        updateNeeded = true
+    end
+
+    local folderNames = {
+        primary = "Primary Missions",
+        secondary = "Secondary Missions"
+    }
+
+    ---Add Base Folder
+    ---@param groupId integer
+    local addMissionFolders = function(groupId)
+        missionCommands.addSubMenuForGroup(groupId, folderNames.primary)
+        missionCommands.addSubMenuForGroup(groupId, folderNames.secondary)
+    end
+
+    ---Add Mission Folder
+    ---@param groupId integer
+    local removeMissionFolders = function(groupId)
+        missionCommands.removeItemForGroup(groupId , { folderNames.primary } )
+        missionCommands.removeItemForGroup(groupId , { folderNames.secondary } )
+    end
+
+    local missionBriefingRequested = function(args)
+        ---@type Mission
+        local mission = args.mission
+        local groupID = args.groupId
+
+        mission:ShowBriefing(groupID)
+    end
+
+    ---comment
+    ---@param groupId integer
+    ---@param mission Mission
+    local addMissionCommands = function(groupId, mission)
+
+        local path = nil
+
+        if mission.priority == "primary" then
+            path = { folderNames.primary }
+        elseif mission.priority == "secondary" then
+            path = { folderNames.secondary }
+        end
+
+        if path then
+            local missionFolderName = "[" .. mission.code .. "] " .. mission.name
+            missionCommands.addSubMenuForGroup(groupId, missionFolderName, path)
+            table.insert(path, missionFolderName)
+            missionCommands.addCommandForGroup(groupId, "Briefing" , missionFolderName , missionBriefingRequested, { groupId = groupId, mission = mission })
+        end
+    end
+
+    local updateCommandsForGroup = function(group)
+        local groupID = group:getID()
+
+        -- Cleanup mission folder
+        removeMissionFolders(groupID)
+
+        -- Add mission folders
+        addMissionFolders(groupID)
+
+        for code, enabled in pairs(enabledByCode) do
+            if enabled == true then
+                local mission = missionsByCode[code]
+                if mission then
+                    addMissionCommands(groupID, mission)
+                end
+            end
+        end
+    end
+
+    local UpdateContinuous = function(none, time)
+        if updateNeeded == false then
+            return time + 15
+        end
+
+        for _, unit in Spearhead.DcsUtil.getAllPlayerUnits() do
+            if unit and unit:isExist() then
+                local group = unit:getGroup()
+                if group then
+                    updateCommandsForGroup(group)
+                end
+            end
+        end
+
+        updateNeeded = false
+        return time + 15
+    end
+
+    timer.scheduleFunction(UpdateContinuous, {}, timer.getTime() + 10)
+
+    do -- Player enter unit listener
+        local onPlayerEnterUnit = function(unit)
+            if unit then
+                local group = unit:getGroup()
+                if group then updateCommandsForGroup(group) end
+            end
+        end
+
+        local OnPlayerEnterUnitListener = {
+            OnPlayerEntersUnit = function (self, unit)
+                onPlayerEnterUnit(unit)
+            end,
+        }
+        Spearhead.Events.AddOnPlayerEnterUnitListener(OnPlayerEnterUnitListener)
+    end
+end
+
+if Spearhead == nil then Spearhead = {} end
+if Spearhead.classes == nil then Spearhead.classes = {} end
+if Spearhead.classes.stageClasses == nil then Spearhead.classes.stageClasses = {} end
+if Spearhead.classes.stageClasses.helpers == nil then Spearhead.classes.stageClasses.helpers = {} end
+Spearhead.classes.stageClasses.helpers.MissionCommandsHelper = MissionCommandsHelper
+
+end --MissionCommandsHelper.lua
+do --Mission.lua
+
+
+---@class Mission : OnUnitLostListener
+---@field name string 
+---@field missionType missionType 
+---@field code string
+---@field priority MissionPriority
+---@field private _state MissionState
+---@field private _zoneName string
+---@field private _database Database
+---@field private _logger Logger 
+---@field private _missionBriefing string
+---@field private _missionGroups MissionGroups
+---@field private _completeListeners Array<MissionCompleteListener> 
+local Mission = {}
+
+
+
+--- @class MissionCompleteListener 
+--- @field OnMissionComplete fun(self: any, mission:Mission)
+
+--- @class MissionGroups 
+--- @field hasTargets boolean
+--- @field groups Array<SpearheadGroup>
+--- @field unitsAlive table<string, table<string, boolean>>
+--- @field targetsAlive table<string, table<string, boolean>>
+--- @field groupNamesPerunit table<string,string>
+
+MINIMAL_UNITS_ALIVE_RATIO = 0.21
+
+---comment
+---@param zoneName string
+---@param priority MissionPriority
+---@param database Database
+---@param logger Logger
+---@return Mission? 
+function Mission.New(zoneName, priority,  database, logger)
+
+    local function ParseZoneName(input)
+        local split_name = Spearhead.Util.split_string(input, "_")
+        local split_length = Spearhead.Util.tableLength(split_name)
+        if Spearhead.Util.startswith(input, "RANDOMMISSION") == true and split_length < 4 then
+            Spearhead.AddMissionEditorWarning("Random Mission with zonename " .. input .. " not in right format")
+            return nil
+        elseif split_length < 3 then
+            Spearhead.AddMissionEditorWarning("Mission with zonename" .. input .. " not in right format")
+            return nil
+        end
+
+        ---@type missionType
+        local parsedType = "nil"
+
+        local inputType = string.lower(split_name[2])
+        if inputType == "dead" then parsedType = "DEAD" end
+        if inputType == "strike" then parsedType = "STRIKE" end
+        if inputType == "bai" then parsedType = "BAI" end
+        if inputType == "sam" then parsedType = "SAM" end
+
+        if parsedType == "nil" then
+            Spearhead.AddMissionEditorWarning("Mission with zonename '" .. input .. "' has an unsupported type '" .. (type or "nil" ))
+            return nil
+        end
+        local name = split_name[3]
+        return {
+            missionName = name,
+            type = parsedType
+        }
+    end
+
+    local parsed = ParseZoneName(zoneName)
+
+    if parsed == nil then return end
+
+    Mission.__index = Mission
+    local o = {}
+    local self = setmetatable(o, Mission)
+    
+    self._zoneName = zoneName
+    self.name = parsed.missionName
+    self.missionType = parsed.type
+    self.code = tostring(database:GetNewMissionCode())
+    self.priority = priority
+    self._state = "NEW"
+
+    self._logger = logger
+    self._database = database
+    self._completeListeners = {}
+
+    self._missionBriefing = database:getMissionBriefingForMissionZone(zoneName)
+    self._missionGroups = {
+        groups = {},
+        unitsAlive = {},
+        targetsAlive = {},
+        hasTargets = false,
+        groupNamesPerunit = {}
+    }
+
+    local SpearheadGroup = Spearhead.classes.stageClasses.Groups.SpearheadGroup
+    local groupNames = database:getGroupsForMissionZone(zoneName)
+    for _, groupName in pairs(groupNames) do
+        
+        local spearheadGroup = SpearheadGroup.New(groupName)
+        table.insert(self._missionGroups.groups, spearheadGroup)
+
+        local isGroupTarget =Spearhead.Util.startswith(string.lower(groupName), "tgt_")
+        for _, unit in pairs(spearheadGroup:GetUnits())do
+            local unitName = unit:getName()
+            local isUnitTarget = Spearhead.Util.startswith(string.lower(unitName), "tgt_")
+
+            if self._missionGroups.unitsAlive[groupName] == nil then 
+                self._missionGroups.unitsAlive[groupName] = {}
+            end
+
+            self._missionGroups.unitsAlive[groupName][unitName] = true
+            self._missionGroups.groupNamesPerunit[unitName] = groupName
+
+            if isGroupTarget == true or isUnitTarget == true then
+                self._missionGroups.hasTargets = true
+
+                if self._missionGroups.targetsAlive[groupName] == nil then
+                    self._missionGroups.targetsAlive[groupName] = {}
+                end
+
+                self._missionGroups.targetsAlive[groupName][unitName] = true
+            end
+
+            Spearhead.Events.addOnUnitLostEventListener(unitName, self)
+        end
+
+        Spearhead.DcsUtil.DestroyGroup(groupName)
+    end
+
+    return self
+end
+
+---comment
+---@return MissionState
+function Mission:GetState()
+    return self._state
+end
+
+function Mission:SpawnPersistedState()
+    for _, group in pairs(self._missionGroups.groups) do
+        group:SpawnCorpsesOnly()
+    end
+end
+
+function Mission:SpawnActive()
+
+    self._logger:info("Activating " .. self.name)
+
+    self._state = "ACTIVE"
+    for _, group in pairs(self._missionGroups.groups) do
+        group:Spawn()
+    end
+
+    self:StartCheckingContinuous()
+end
+
+---@private
+function Mission:StartCheckingContinuous()
+    ---comment
+    ---@param mission Mission
+    ---@param time any
+    ---@return unknown
+    local Check = function (mission, time)
+        mission:UpdateState(true, true)
+
+        if mission:GetState() == "COMPLETED" then
+            return nil
+        end
+        return time + 30
+    end
+    timer.scheduleFunction(Check, self, timer.getTime() + 30)
+end
+
+
+---comment
+---@param groupId integer
+function Mission:ShowBriefing(groupId)
+    local ToStateString = function(self)
+        if self._hasSpecificTargets then
+            local dead = 0
+            local total = 0
+            for _, group in pairs(self._targetAliveStates) do
+                for _, isAlive in pairs(group) do
+                    total = total + 1
+                    if isAlive == false then
+                        dead = dead + 1
+                    end
+                end
+            end
+            local completionPercentage = math.floor((dead / total) * 100)
+            return "Targets Destroyed: " .. completionPercentage .. "%"
+        else
+            local dead = 0
+            local total = 0
+            for _, group in pairs(self._groupUnitAliveDict) do
+                for _, isAlive in pairs(group) do
+                    total = total + 1
+                    if isAlive == false then
+                        dead = dead + 1
+                    end
+                end
+            end
+
+            local completionPercentage = math.floor((dead / total) * 100)
+            return "Targets Destroyed: " .. completionPercentage .. "%"
+        end
+    end
+
+    local stateString = ToStateString(self)
+
+    if self._missionBriefing == nil then self._missionBriefing = "No briefing available" end
+    local text = "Mission [" .. self.code .. "] ".. self.name .. "\n \n" .. self._missionBriefing .. " \n \n" .. stateString
+    trigger.action.outTextForGroup(groupId, text, 30);
+end
+
+
+---@param checkHealth boolean
+---@param messageIfDone boolean
+function Mission:UpdateState(checkHealth, messageIfDone)
+    if checkHealth == nil then checkHealth = false end
+    if messageIfDone == false then messageIfDone = true end
+
+    if self._state == "COMPLETED" then
+        return
+    end
+
+    if checkHealth == true then
+        local function unitAliveState(unitName)
+            local staticObject = StaticObject.getByName(unitName)
+            if staticObject then
+                if staticObject:isExist() == true then
+                    local life0 = staticObject:getDesc().life
+                    if staticObject:getLife() / life0 < 0.3 then
+                        self._logger:debug("exploding unit")
+                        trigger.action.explosion(staticObject:getPoint(), 100)
+                        return false
+                    end
+                    return true
+                else
+                    return false
+                end
+            else
+                local unit = Unit.getByName(unitName)
+
+                local alive = unit ~= nil and unit:isExist() == true
+                if alive == true then
+                    if unit:getLife() / unit:getLife0() < 0.2 then
+                        self._logger:debug("exploding unit")
+                        trigger.action.explosion(unit:getPoint(), 100)
+                        return false
+                    end
+                    return true
+                else
+                    return false
+                end
+            end
+        end
+
+        for groupName, unitNameDict in pairs(self._missionGroups.unitsAlive) do
+            for unitName, isAlive in pairs(unitNameDict) do
+                if isAlive == true then
+                    self._missionGroups.unitsAlive[groupName][unitName] = unitAliveState(unitName)
+                end
+            end
+        end
+
+        for groupName, unitNameDict in pairs(self._missionGroups.targetsAlive) do
+            for unitName, isAlive in pairs(unitNameDict) do
+                if isAlive == true then
+                    self._missionGroups.targetsAlive[groupName][unitName] = unitAliveState(unitName)
+                end
+            end
+        end
+    end
+
+    if self._missionGroups.hasTargets == true then
+        
+        local anyTargetAlive = function()
+            for _, units in pairs(self._missionGroups.targetsAlive) do
+                for _, isAlive in pairs(units) do
+                    if isAlive == true then
+                        return true
+                    end
+                end
+            end
+            return false
+        end
+        
+        if anyTargetAlive() ~= true then
+            self._state = "COMPLETED"
+        end
+    else
+        local function CountAliveGroups()
+            local aliveGroups = 0
+
+            for _, group in pairs(self._missionGroups.unitsAlive) do
+                local groupTotal = 0
+                local groupDeath = 0
+                for _, isAlive in pairs(group) do
+                    if isAlive ~= true then
+                        groupDeath = groupDeath + 1
+                    end
+                    groupTotal = groupTotal + 1
+                end
+
+                local aliveRatio = (groupTotal - groupDeath) / groupTotal
+                if aliveRatio >= MINIMAL_UNITS_ALIVE_RATIO then
+                    aliveGroups = aliveGroups + 1
+                end
+            end
+
+            return aliveGroups
+        end
+
+        if CountAliveGroups() == 0 then
+            self._state = "COMPLETED"
+        end
+    end
+
+    ---comment
+    ---@param mission Mission
+    local NotifyMissionComplete = function(mission)
+        mission:NotifyMissionComplete()
+        return nil
+    end
+    if self._state == "COMPLETED" then
+        timer.scheduleFunction(NotifyMissionComplete, self, timer.getTime() + 3)
+    end
+end
+
+---private usage advised
+function Mission:NotifyMissionComplete()
+
+    self._logger:info("Mission Completed: " .. self._zoneName)
+    trigger.action.outText("Mission " .. self.name .. " [" .. self.code .. "] was completed succesfully" , 20)
+
+    for _, listener in pairs(self._completeListeners) do
+        pcall(function() 
+            listener:OnMissionComplete(self)
+        end)
+    end
+end
+
+
+---@param listener MissionCompleteListener Object that implements "OnMissionComplete(self, mission)"
+function Mission:AddMissionCompleteListener(listener)
+    if type(listener) ~= "table" then
+        return
+    end
+    table.insert(self._completeListeners, listener)
+end
+
+function Mission:OnUnitLost(object)
+    --[[
+        OnUnit lost event
+    ]]--
+    self._logger:debug("Getting on unit lost event")
+
+    local category = Object.getCategory(object)
+    if category == Object.Category.UNIT then
+        local unitName = object:getName()
+        self._logger:debug("UnitName:" .. unitName)
+
+        local groupName = self._missionGroups.groupNamesPerunit[unitName]
+        self._missionGroups.unitsAlive[groupName][unitName] = false
+
+        if self._missionGroups.targetsAlive[groupName] and self._missionGroups.targetsAlive[groupName][unitName] then
+            self._missionGroups.targetsAlive[groupName][unitName] = false
+        end
+    elseif category == Object.Category.STATIC  then
+        local name = object:getName()
+        self._missionGroups.unitsAlive[name][name] = false
+
+        self._logger:debug("Name " .. name)
+
+        if self._missionGroups.targetsAlive[name] and self._missionGroups.targetsAlive[name][name] then
+            self._missionGroups.targetsAlive[name][name] = false
+        end
+    end
+    self:UpdateState(false, true)
+end
+
+if not Spearhead.classes then Spearhead.classes = {} end
+if not Spearhead.classes.stageClasses then Spearhead.classes.stageClasses = {} end
+if not Spearhead.classes.stageClasses.Missions then Spearhead.classes.stageClasses.Missions = {} end
+Spearhead.classes.stageClasses.Missions.Mission = Mission
+
+
+
+end --Mission.lua
+do --ExtraStage.lua
+
+---@class ExtraStage : Stage
+local ExtraStage = {}
+
+---comment
+---@param database Database
+---@param stageConfig StageConfig
+---@param logger any
+---@param initData StageInitData
+---@return ExtraStage
+function ExtraStage.New(database, stageConfig, logger, initData)
+
+    -- "Import"
+    local Stage = Spearhead.classes.stageClasses.Stages.__Stage
+    setmetatable(ExtraStage, Stage)
+
+    ExtraStage.__index = ExtraStage
+    local self = Stage.New(database, stageConfig, logger, initData, "secondary") --[[@as ExtraStage]]
+    setmetatable(self, ExtraStage)
+
+    self.OnPostBlueActivated = function (selfStage)
+        selfStage:MarkStage("GRAY")
+    end
+    
+    self.OnPostStageComplete = function (selfStage)
+        self:ActivateBlueStage()
+    end
+
+    return self
+end
+
+---comment
+---@param self Stage
+---@param number integer
+function ExtraStage:OnStageNumberChanged(number)
+
+    self._activeStage = number
+    if Spearhead.capInfo.IsCapActiveWhenZoneIsActive(self.zoneName, number) == true then
+        self:PreActivate()
+    end
+
+    if number == self.stageNumber then
+        self:ActivateStage()
+    end
+
+    if self.isComplete == true then
+        self:ActivateBlueStage()
+    end
+
+end
+
+
+if not Spearhead.classes then Spearhead.classes = {} end
+if not Spearhead.classes.stageClasses then Spearhead.classes.stageClasses = {} end
+if not Spearhead.classes.stageClasses.Stages then Spearhead.classes.stageClasses.Stages = {} end
+Spearhead.classes.stageClasses.Stages.ExtraStage = ExtraStage
+
+
+
+end --ExtraStage.lua
+do --Stage.lua
+
+---@alias StageColor
+---| "RED"
+---| "BLUE"
+---| "GRAY"
+
+--- @class StageData
+--- @field missionsByCode table<string, Mission>
+--- @field missions Array<Mission>
+--- @field sams Array<Mission>
+--- @field blueSams Array<BlueSam>
+--- @field airbases Array<StageBase>
+--- @field miscGroups Array<SpearheadGroup>
+--- @field maxMissions integer
+
+--- @class StageInitData
+--- @field stageZoneName string
+--- @field stageNumber integer
+--- @field stageDisplayName string
+
+
+--- @class StageCompleteListener
+--- @field OnStageComplete fun(self:StageCompleteListener, stage:Stage)
+
+--- @class Stage : MissionCompleteListener, OnStageChangedListener
+--- @field zoneName string
+--- @field stageName string
+--- @field stageNumber number
+--- @field isActive boolean
+--- @field protected isComplete boolean
+--- @field protected _missionPriority MissionPriority
+--- @field protected _database Database
+--- @field protected _db StageData
+--- @field protected _logger Logger
+--- @field protected _preActivated boolean
+--- @field protected _activeStage integer
+--- @field protected _stageConfig StageConfig
+--- @field protected _stageDrawingId integer
+--- @field protected _spawnedGroups Array<string>
+--- @field protected _stageCompleteListeners Array<StageCompleteListener>
+--- @field protected CheckContinuousAsync fun(self:Stage, time:number) : number?
+--- @field protected OnPostStageComplete fun(self:Stage)?
+--- @field protected OnPostBlueActivated fun(self:Stage)?
+local Stage = {}
+
+local stageDrawingId = 100
+
+---comment
+---@param database Database
+---@param stageConfig StageConfig
+---@param logger any
+---@param initData StageInitData
+---@param missionPriority MissionPriority
+---@return Stage
+function Stage.New(database, stageConfig, logger, initData, missionPriority)
+
+    local SpearheadGroup = Spearhead.classes.stageClasses.Groups.SpearheadGroup
+
+    Stage.__index = Stage
+    local o = {}
+    local self = setmetatable(o, Stage)
+
+    self.zoneName = initData.stageZoneName
+    self.stageNumber = initData.stageNumber
+    self.isActive = false
+    self.isComplete = false
+    self.stageName = initData.stageDisplayName
+    
+    self.OnPostStageComplete = nil
+    self.OnPostBlueActivated = nil
+
+    self._database = database
+    self._logger = logger
+    self._db = {
+        missionsByCode = {},
+        missions = {},
+        sams ={},
+        blueSams = {},
+        airbases ={},
+        miscGroups = {},
+        maxMissions = stageConfig.maxMissionsPerStage
+    }
+    self._activeStage = -99
+    self._preActivated = false
+    self._stageConfig = stageConfig or {}
+    self._stageDrawingId = stageDrawingId + 1
+    self._spawnedGroups = {}
+    self._missionPriority = missionPriority
+    self._stageCompleteListeners = {}
+
+    stageDrawingId = stageDrawingId + 1
+
+    self._logger:info("Initiating new Stage with name: " .. self.zoneName)
+
+    ---comment
+    ---@param self Stage
+    ---@param time number?
+    self.CheckContinuousAsync = function (self, time)
+        
+        self:CheckAndUpdateSelf()
+        if self:IsComplete() == true then
+            self:NotifyComplete()
+            return nil
+        end
+
+        return time + 20
+    end
+
+    do -- load tables
+        local missionZones = database:getMissionsForStage(self.zoneName)
+        for _, missionZone in pairs(missionZones) do
+            local mission = Spearhead.classes.stageClasses.Missions.Mission.New(missionZone, self._missionPriority, database, logger)
+            if mission then
+                self._db.missionsByCode[mission.code] = mission
+                if mission.missionType == "SAM" then
+                    table.insert(self._db.sams, mission)
+                else
+                    table.insert(self._db.missions, mission)
+                end
+            end
+        end
+
+        local randomMissionNames = database:getRandomMissionsForStage(self.zoneName)
+
+        local randomMissionByName = {}
+        for _, missionZoneName in pairs(randomMissionNames) do
+            local mission = Spearhead.classes.stageClasses.Missions.Mission.New(missionZoneName, "primary", database, logger)
+            if mission then
+                if randomMissionByName[mission.name] == nil then
+                    randomMissionByName[mission.name] = {}
+                end
+                table.insert(randomMissionByName[mission.name], mission)
+            end
+        end
+
+        for _, missions in pairs(randomMissionByName) do
+            local mission = Spearhead.Util.randomFromList(missions)
+            if mission then
+                self._db.missionsByCode[mission.code] = mission
+                if mission.missionType == "SAM" then
+                    table.insert(self._db.sams, mission)
+                else
+                    table.insert(self._db.missions, mission)
+                end
+            end
+        end
+
+        for _, mission in pairs(self._db.missionsByCode) do
+            mission:AddMissionCompleteListener(self)
+        end
+
+        local airbaseIds = database:getAirbaseIdsInStage(self.zoneName)
+        if airbaseIds ~= nil and type(airbaseIds) == "table" then
+            for _, airbaseId in pairs(airbaseIds) do
+                local airbase = Spearhead.classes.stageClasses.SpecialZones.StageBase.New(database, logger, airbaseId)
+                table.insert(self._db.airbases, airbase)
+            end
+        end
+
+        for _, samZoneName in pairs(database:getBlueSamsInStage(self.zoneName)) do
+            local blueSam =  Spearhead.classes.stageClasses.SpecialZones.BlueSam:new(database, logger, samZoneName)
+            table.insert(self._db.blueSams, blueSam)
+        end
+
+        local miscGroups = database:getMiscGroupsAtStage(self.zoneName)
+        for _, groupName in pairs(miscGroups) do
+            local miscGroup = SpearheadGroup.New(groupName)
+
+            table.insert(self._db.miscGroups, miscGroup)
+            Spearhead.DcsUtil.DestroyGroup(groupName)
+        end
+    end
+
+    Spearhead.Events.AddStageNumberChangedListener(self)
+        
+    return self
+end
+
+---@return boolean
+function Stage:IsComplete()
+    if self.isComplete == true then return true end
+
+    for i, mission in pairs(self._db.sams) do
+        local state = mission:GetState()
+        if state == "ACTIVE" or state == "NEW" then
+            return false
+        end
+    end
+
+    for i, mission in pairs(self._db.missions) do
+        local state = mission:GetState()
+        if state == "ACTIVE" or state == "NEW" then
+            return false
+        end
+    end
+
+    self.isComplete = true
+    return true
+end
+
+---comment
+function Stage:CheckAndUpdateSelf()
+    self._logger:debug("Checking on Stage: " .. self.zoneName)
+
+    local activeCount = 0
+    local dbTables = self:GetStageTables()
+
+    local availableMissions = {}
+    for _, mission in pairs(dbTables.missionsByCode) do
+        local state = mission:GetState()
+
+        if state == "ACTIVE" then
+            activeCount = activeCount + 1
+        end
+
+        if state == "NEW" then
+            table.insert(availableMissions, mission)
+        end
+    end
+
+    local max = dbTables.maxMissions
+    local availableMissionsCount = Spearhead.Util.tableLength(availableMissions)
+    if activeCount < max and availableMissionsCount > 0  then
+        for i = activeCount+1, max do
+            if availableMissionsCount == 0 then
+                i = max+1 --exits this loop
+            else
+                local index = math.random(1, availableMissionsCount)
+
+                ---@type Mission
+                local mission = table.remove(availableMissions, index)
+                if mission then
+                    mission:SpawnActive()
+                    activeCount = activeCount + 1;
+                end
+                availableMissionsCount = availableMissionsCount - 1
+            end
+        end
+    end
+end
+
+---private use only
+function Stage:NotifyComplete()
+
+    self._logger:info("Stage complete: " .. self.stageName)
+
+    for _, listener in pairs(self._stageCompleteListeners) do
+        pcall(function()
+            listener:OnStageComplete(self)
+        end)
+    end
+
+    if self.OnPostStageComplete then
+        timer.scheduleFunction(self.OnPostStageComplete, self, timer.getTime() + 3)
+    end
+end
+
+---@param listener StageCompleteListener
+function Stage:AddStageCompleteListener(listener)
+    table.insert(self._stageCompleteListeners, listener)
+end
+
+---Activates all SAMS, Airbase units etc all at once.
+function Stage:PreActivate()
+    if self._preActivated == false then
+        self._preActivated = true
+        for key, mission in pairs(self._db.sams) do
+            if mission then
+                mission:SpawnActive()
+            end
+        end
+
+        for _, airbase in pairs(self._db.airbases) do
+            airbase:ActivateRedStage()
+        end
+    end
+end
+
+---@param stageColor StageColor
+function Stage:MarkStage(stageColor)
+    local fillColor = {1, 0, 0, 0.1}
+    local line ={ 1, 0,0, 1 }
+
+    if stageColor == "RED" then
+        fillColor = {1, 0, 0, 0.1}
+        line ={ 1, 0,0, 1 }
+    elseif stageColor =="BLUE" then
+        fillColor = {0, 0, 1, 0.1}
+        line ={ 0, 0,1, 1 }
+    elseif stageColor == "GRAY" then
+        fillColor = {80/255, 80/255, 80/255, 0.15}
+        line ={ 80/255, 80/255,80/255, 1 }
+    end
+
+    local zone = Spearhead.DcsUtil.getZoneByName(self.zoneName)
+    if zone and self._stageConfig.isDrawStagesEnabled == true then
+        self._logger:debug("drawing stage: " .. self.zoneName)
+        if zone.zone_type == Spearhead.DcsUtil.ZoneType.Cilinder then
+            trigger.action.circleToAll(-1, self._stageDrawingId, {x = zone.x, y = 0 , z = zone.z}, zone.radius, {0,0,0,0}, {0,0,0,0},4, true)
+        else
+            --trigger.action.circleToAll(-1, self.stageDrawingId, {x = zone.x, y = 0 , z = zone.z}, zone.radius, { 1, 0,0, 1 }, {1,0,0,1},4, true)
+            trigger.action.quadToAll( -1, self._stageDrawingId,  zone.verts[1], zone.verts[2], zone.verts[3],  zone.verts[4], {0,0,0,0}, {0,0,0,0}, 4, true)
+        end
+
+        trigger.action.setMarkupColorFill(self._stageDrawingId, fillColor)
+        trigger.action.setMarkupColor(self._stageDrawingId, line)
+    end
+end
+
+function Stage:ActivateStage()
+    self.isActive = true;
+
+    pcall(function()
+        self:MarkStage("RED")
+    end)
+
+    self:PreActivate()
+    
+    self._logger:debug("Activating Misc groups for zone. Count: " .. Spearhead.Util.tableLength(self._db.miscGroups))
+    for _, miscGroup in pairs(self._db.miscGroups) do
+        miscGroup:Spawn()
+    end
+
+    for _, mission in pairs(self._db.missions) do
+        if mission.missionType == "DEAD" then
+            mission:SpawnActive()
+        end
+    end
+
+    timer.scheduleFunction(self.CheckContinuousAsync, self, timer.getTime() + 3)
+end
+
+---Private usage only
+---@return StageData
+function Stage:GetStageTables()
+    return self._db
+end
+
+---comment
+---@param self Stage
+---@param number integer
+function Stage:OnStageNumberChanged(number)
+
+    if self._activeStage == number then --only activate once for a stage
+        return
+    end
+
+    local previousActive = self._activeStage
+    self._activeStage = number
+    if Spearhead.capInfo.IsCapActiveWhenZoneIsActive(self.zoneName, number) == true then
+        self:PreActivate()
+    end
+
+    if number == self.stageNumber then
+        self:ActivateStage()
+    end
+
+    if previousActive <= self.stageNumber then
+        if number > self.stageNumber then
+            self:ActivateBlueStage()
+        end
+    end
+end
+
+function Stage:GetBriefing()
+    return "Briefing For "
+end
+
+---@param self Stage
+---@param mission Mission
+Stage.OnMissionComplete = function(self, mission)
+    self:CheckAndUpdateSelf()
+end
+
+
+---private use only
+function Stage:ActivateBlueGroups()
+
+    for _, blueSam in pairs(self._db.blueSams) do
+        blueSam:Activate()
+    end
+
+    for _, airbase in pairs(self._db.airbases) do
+        airbase:ActivateBlueStage()
+    end
+
+    if self.OnPostBlueActivated then
+        pcall(function()
+            self:OnPostBlueActivated()
+        end)
+    end
+end
+
+function Stage:ActivateBlueStage()
+
+    self._logger:debug("Setting stage '" .. Spearhead.Util.toString(self.zoneName) .. "' to blue")
+    
+    for _, mission in pairs(self._db.missions) do
+        mission:SpawnPersistedState()
+    end
+
+    for _, mission in pairs(self._db.sams) do
+        mission:SpawnPersistedState()
+    end
+
+    for _, miscGroup in pairs(self._db.miscGroups) do
+        miscGroup:Spawn()
+    end
+
+    ---@param self Stage
+    local ActivateBlueAsync = function(self)
+        pcall(function()
+            self:MarkStage("BLUE")
+        end)
+
+        self:ActivateBlueGroups()
+
+        return nil
+    end
+
+    timer.scheduleFunction(ActivateBlueAsync, self, timer.getTime() + 3)
+end
+
+if not Spearhead.classes then Spearhead.classes = {} end
+if not Spearhead.classes.stageClasses then Spearhead.classes.stageClasses = {} end
+if not Spearhead.classes.stageClasses.Stages then Spearhead.classes.stageClasses.Stages = {} end
+Spearhead.classes.stageClasses.Stages.__Stage = Stage
+
+
+
+
+
+
+
+end --Stage.lua
+do --PrimaryStage.lua
+
+---@class PrimaryStage : Stage
+local PrimaryStage = {}
+
+---comment
+---@param database Database
+---@param stageConfig StageConfig
+---@param logger any
+---@param initData StageInitData
+---@return PrimaryStage
+function PrimaryStage.New(database, stageConfig, logger, initData)
+
+    -- "Import"
+    local Stage = Spearhead.classes.stageClasses.Stages.__Stage
+    setmetatable(PrimaryStage, Stage)
+    PrimaryStage.__index = PrimaryStage
+    setmetatable(PrimaryStage, {__index = Stage}) 
+    
+    local o = Stage.New(database, stageConfig, logger, initData, "primary") --[[@as PrimaryStage]]
+    return o 
+end
+
+if not Spearhead.classes then Spearhead.classes = {} end
+if not Spearhead.classes.stageClasses then Spearhead.classes.stageClasses = {} end
+if not Spearhead.classes.stageClasses.Stages then Spearhead.classes.stageClasses.Stages = {} end
+Spearhead.classes.stageClasses.Stages.PrimaryStage = PrimaryStage
+
+
+
+end --PrimaryStage.lua
+do --aliases.lua
+
+
+
+do -- mission aliases
+
+    --- @alias MissionPriority
+    --- | "primary"
+    --- | "secondary"
+
+    --- @alias missionType
+    --- | "nil"
+    --- | "STRIKE"
+    --- | "BAI"
+    --- | "DEAD"
+    --- | "SAM"
+
+    --- @alias MissionState
+    --- | "NEW"
+    --- | "ACTIVE"
+    --- | "COMPLETED"
+
+    --- @alias LogLevel
+    --- | "DEBUG"
+    --- | "INFO"
+    --- | "WARN"
+    --- | "ERROR"
+    --- | "NONE"
+
+
+
+    ---@class Array<T>: { [integer]: T }
+
+    --- @class Position
+    --- @field x number x position (Top-Down on Map)
+    --- @field y number y altitude 
+    --- @field z number z position (Left-Right on Map)
+
+end
+
+
+end --aliases.lua
 do --Main
 
 --Single player purpose
@@ -5267,19 +5378,17 @@ end
 
 local startTime = timer.getTime() * 1000
 
-local dbLogger = Spearhead.LoggerTemplate:new("database", Spearhead.LoggerTemplate.LogLevelOptions.INFO)
-local standardLogger = Spearhead.LoggerTemplate:new("", Spearhead.LoggerTemplate.LogLevelOptions.INFO)
+local dbLogger = Spearhead.LoggerTemplate:new("database", "INFO")
+local standardLogger = Spearhead.LoggerTemplate:new("", "INFO")
 local databaseManager = Spearhead.DB:new(dbLogger, debug)
 
 local capConfig = Spearhead.internal.configuration.CapConfig:new();
 local stageConfig = Spearhead.internal.configuration.StageConfig:new();
 
-standardLogger:info("Using StageConfig: ".. stageConfig:toString())
-
-local startingStage = stageConfig:getStartingStage() or 1
+local startingStage = stageConfig.startingStage or 1
 if SpearheadConfig and SpearheadConfig.Persistence and SpearheadConfig.Persistence.enabled == true then
     standardLogger:info("Persistence enabled")
-    local persistenceLogger = Spearhead.LoggerTemplate:new("Persistence", Spearhead.LoggerTemplate.LogLevelOptions.DEBUG)
+    local persistenceLogger = Spearhead.LoggerTemplate:new("Persistence", "INFO")
     Spearhead.classes.persistence.Persistence.Init(persistenceLogger)
 
     local persistanceStage = Spearhead.classes.persistence.Persistence.GetActiveStage()
@@ -5336,9 +5445,11 @@ do --Spearhead API
 
 
 
+
+
 local SpearheadAPI = {}
 do
-    
+
     SpearheadAPI.Stages = {}
 
     --- Changes the active stage of spearhead.
