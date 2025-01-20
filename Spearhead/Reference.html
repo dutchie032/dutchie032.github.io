@@ -87,7 +87,7 @@
     `;s.appendChild(a)}i(t,e){this.dispatchEvent(new CustomEvent(t,{bubbles:true,composed:true,detail:e}))}}customElements.define("dark-mode",a);</script><div style="max-width: 960px; margin: 0 auto 60px auto; padding: 8px;max-width: 960px;" class="markdown-style" mode="dark">
     <h1 id="spearhead-reference"><a class="anchor" aria-hidden="true" tabindex="-1" href="#spearhead-reference"><span class="octicon octicon-link"></span></a>Spearhead Reference</h1>
     <blockquote>
-      <p><strong><em>Spearhead last updated at:</em></strong> 2025-01-20T05:49:14.074409</p>
+      <p><strong><em>Spearhead last updated at:</em></strong> 2025-01-20T17:55:56.882843</p>
     </blockquote>
     <h2 id="for-the-story-tellers"><a class="anchor" aria-hidden="true" tabindex="-1" href="#for-the-story-tellers"><span class="octicon octicon-link"></span></a>For the Story tellers</h2>
     <p>Spearhead. A framework created for the mission maker.<br>For those who do want to create a mission with a story and progress, but do not want to get into scripting. Creating an engaging mission can be an incredible feat. First think of the mission, the submission, the placement, the time. Once the concept is done you'll need to place all the objects into the editor. Not too many, but also not too little. Then comes the scripts to make it feel engaging and organic. The latter is probably the biggest hurdle.</p>
@@ -264,6 +264,14 @@ SpearheadConfig = {
     <h2 id="all-trigger-zone-name-options"><a class="anchor" aria-hidden="true" tabindex="-1" href="#all-trigger-zone-name-options"><span class="octicon octicon-link"></span></a>All Trigger zone name options:</h2>
     <details>
       <summary>MISSIONSTAGE_</summary>A mission stage that encapsulates multiple missions, airbases and other objects.
+    </details>
+    <details>
+      <summary>WAITINGSTAGE_</summary>A stage that functions as a logic delay or timer.<br>With this you can add a wait before or in between stages.
+      <p>
+        Naming Convention: <code>WAITINGSTAGE_&#x3C;order>_&#x3C;amount of seconds></code>
+        Example: <code>WAITINGSTAGE_2_180</code>
+      </p>
+      <p>A waiting stage can be part of the same stage order as other stages.<br>This will first activate the DELAYSTAGE and only when the DELAYSTAGE is completed will the other stages be activated.<br>This is so you can easily add delays later in your mission development, without havint to rename all subsequent stages.</p>
     </details>
     <details>
       <summary>MISSION_</summary>

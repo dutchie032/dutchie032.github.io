@@ -1,16 +1,32 @@
 --[[
-        Spearhead Compile Time: 2025-01-20T05:49:32.563862
+        Spearhead Compile Time: 2025-01-20T17:56:16.513789
     ]]
 do --spearhead_events.lua
 
 local SpearheadEvents = {}
 do
+
+    ---@type Logger
+    local logger = nil
+
+    ---@param logLevel LogLevel
+    SpearheadEvents.Init = function(logLevel)
+        logger = Spearhead.LoggerTemplate:new("Events", logLevel)
+    end
+
+
     local warn = function(text)
-        env.warn("[Spearhead][Events] " .. (text or "nil"))
+        if logger then
+            logger:warn(text)
+        end
     end
 
     local logError = function(text)
-        env.error("[Spearhead][Events] " .. (text or "nil"))
+        if logger then logger:error(text) end
+    end
+
+    local logDebug = function(text)
+        if logger then logger:debug(text) end
     end
 
     ---@class OnStageChangedListener
@@ -277,6 +293,11 @@ do
             event.id == world.event.S_EVENT_EJECTION or
             event.id == world.event.S_EVENT_UNIT_LOST then
             local object = event.initiator
+
+            if object and object.getName then
+                logDebug("Receiving death event from: " .. object:getName())
+            end
+            
             if object and object.getName and OnUnitLostListeners[object:getName()] then
                 for _, callable in pairs(OnUnitLostListeners[object:getName()]) do
                     local succ, err = pcall(function()
@@ -893,6 +914,10 @@ do -- DB
                             table.insert(o.tables.stage_zonesByNumer[stringified], zone_name)
                             o.tables.stage_numberPerzone[zone_name] = stringified
                         end
+                    end
+
+                    if string.lower(split_string[1]) == "waitingstage" then
+                        table.insert(o.tables.stage_zones, zone_name)
                     end
 
                     if string.lower(split_string[1]) == "mission" then
@@ -1607,8 +1632,14 @@ do -- INIT UTIL
     ---comment
     ---@param str string
     ---@param findable string
+    ---@param ignoreCase boolean?
     ---@return boolean
-    UTIL.startswith = function(str, findable)
+    UTIL.startswith = function(str, findable, ignoreCase)
+
+        if ignoreCase == true then
+            return string.lower(str):find('^' .. string.lower(findable)) ~= nil
+        end
+
         return str:find('^' .. findable) ~= nil
     end
 
@@ -3574,10 +3605,12 @@ do
     if SpearheadConfig == nil then SpearheadConfig = {} end
     if SpearheadConfig.Persistence == nil then SpearheadConfig.Persistence = {} end
 
-    local path  = (SpearheadConfig.Persistence.directory or (lfs.writedir() .. "\\Data" )) .. "\\" .. (SpearheadConfig.Persistence.fileName or "Spearhead_Persistence.json")
+    local path  = nil
     local updateRequired = false
 
     local createFileIfNotExists = function()
+        if not path then return end
+
         local f = io.open(path, "r")
         if f == nil then
             f = io.open(path, "w+")
@@ -3593,6 +3626,8 @@ do
     end
 
     local loadTablesFromFile = function()
+        if not path then return end
+
         logger:info("Loading data from persistance file...")
         local f  = io.open(path, "r")
         if f == nil then
@@ -3628,6 +3663,8 @@ do
     end
 
     local writeToFile = function()
+        if not path then return end
+
         local f = io.open(path, "w+")
         if f == nil then
             error("Could not open file for writing")
@@ -3676,6 +3713,8 @@ do
             env.error("[Spearhead][Persistence] lfs and io seem to be sanitized. Persistence is skipped and disabled")
             return
         end
+
+        path = (SpearheadConfig.Persistence.directory or (lfs.writedir() .. "\\Data" )) .. "\\" .. (SpearheadConfig.Persistence.fileName or "Spearhead_Persistence.json")
 
         createFileIfNotExists()
         loadTablesFromFile()
@@ -3752,6 +3791,9 @@ local StagesByIndex = {}
 ---@type table<string, Array<Stage>>
 local SideStageByIndex = {}
 
+---@type table<string, Array<WaitingStage>>
+local WaitingStagesByIndex = {}
+
 local currentStage = -99
 
 
@@ -3798,69 +3840,142 @@ function GlobalStageManager:NewAndStart(database, stageConfig)
             end
 
             if anyIncomplete == false and stageConfig.isAutoStages == true then
-                logger:debug("Setting next stage to: " .. tostring(currentStage + 1))
-                Spearhead.Events.PublishStageNumberChanged(currentStage + 1)
+
+                -- CHECK WAITING STAGES 
+                local nextStage = currentStage + 1
+                
+                if WaitingStagesByIndex[tostring(nextStage)] then
+                    for _, waitingStage in pairs(WaitingStagesByIndex[tostring(nextStage)]) do
+                        if waitingStage:IsActive() == false then
+                            waitingStage:ActivateStage()
+                        end
+                    end
+                end
+                
+                local anyWaiting = false
+                if WaitingStagesByIndex[tostring(nextStage)] then
+                    for _, waitingStage in pairs(WaitingStagesByIndex[tostring(nextStage)]) do
+                        if waitingStage:IsComplete() == false then
+                            anyWaiting = true
+                        end
+                    end
+                end
+
+                if anyWaiting == false then
+                    logger:debug("Setting next stage to: " .. tostring(currentStage + 1))
+                    Spearhead.Events.PublishStageNumberChanged(currentStage + 1)
+                end
             end
         end
     }
 
     for _, stageName in pairs(database:getStagezoneNames()) do
-        local valid = true
 
-        local split = Spearhead.Util.split_string(stageName, "_")
-        if Spearhead.Util.tableLength(split) < 2 then
-            Spearhead.AddMissionEditorWarning("Stage zone with name " .. stageName .. " does not have a order number or valid format")
-            valid = false
-        end
-
-        if Spearhead.Util.tableLength(split) < 3 then
-            Spearhead.AddMissionEditorWarning("Stage zone with name " .. stageName .. " does not have a stage name")
-            valid = false
-        end
-
-        local orderNumber = nil 
-        local isSideStage = false
-        if valid == true then
-            local orderNumberString = string.lower(split[2])
-            if Spearhead.Util.startswith(orderNumberString, "x") == true then
-                isSideStage = true
-
-                local orderNumberString = string.gsub(orderNumberString, "x", "")
-                orderNumber = tonumber(orderNumberString)
-            else
-                orderNumber = tonumber(split[2])
-            end
-
-            if orderNumber == nil then
-                Spearhead.AddMissionEditorWarning("Stage zone with name " .. stageName .. " does not have a valid order number : " .. split[2])
+        if Spearhead.Util.startswith(stageName, "missionstage", true) then
+            local valid = true
+            local split = Spearhead.Util.split_string(stageName, "_")
+            if Spearhead.Util.tableLength(split) < 2 then
+                Spearhead.AddMissionEditorWarning("Stage zone with name " .. stageName .. " does not have a order number or valid format")
                 valid = false
             end
-        end
-            
-        local stageDisplayName = split[3]
-        local stagelogger = Spearhead.LoggerTemplate:new(stageName, stageConfig.logLevel)
-        if valid == true and orderNumber then
 
-            ---@type StageInitData
-            local initData = {
-                stageDisplayName = stageDisplayName,
-                stageNumber =  orderNumber,
-                stageZoneName = stageName,
-            }
+            if Spearhead.Util.tableLength(split) < 3 then
+                Spearhead.AddMissionEditorWarning("Stage zone with name " .. stageName .. " does not have a stage name")
+                valid = false
+            end
 
-            if isSideStage == true then
-                local stage = Spearhead.classes.stageClasses.Stages.ExtraStage.New(database, stageConfig, stagelogger, initData)
-                stage:AddStageCompleteListener(OnStageCompleteListener)
+            local orderNumber = nil 
+            local isSideStage = false
+            if valid == true then
+                local orderNumberString = string.lower(split[2])
+                if Spearhead.Util.startswith(orderNumberString, "x") == true then
+                    isSideStage = true
 
-                if SideStageByIndex[tostring(orderNumber)] == nil then SideStageByIndex[tostring(orderNumber)] = {} end
-                table.insert(SideStageByIndex[tostring(orderNumber)], stage) 
-            else 
-                local stage = Spearhead.classes.stageClasses.Stages.PrimaryStage.New(database, stageConfig, stagelogger, initData)
-                stage:AddStageCompleteListener(OnStageCompleteListener)
+                    local orderNumberString = string.gsub(orderNumberString, "x", "")
+                    orderNumber = tonumber(orderNumberString)
+                else
+                    orderNumber = tonumber(split[2])
+                end
+
+                if orderNumber == nil then
+                    Spearhead.AddMissionEditorWarning("Stage zone with name " .. stageName .. " does not have a valid order number : " .. split[2])
+                    valid = false
+                end
+            end
                 
-                if StagesByIndex[tostring(orderNumber)] == nil then StagesByIndex[tostring(orderNumber)] = {} end
-                table.insert(StagesByIndex[tostring(orderNumber)], stage) 
-            end 
+            local stageDisplayName = split[3]
+            local stagelogger = Spearhead.LoggerTemplate:new(stageName, stageConfig.logLevel)
+            if valid == true and orderNumber then
+
+                ---@type StageInitData
+                local initData = {
+                    stageDisplayName = stageDisplayName,
+                    stageNumber =  orderNumber,
+                    stageZoneName = stageName,
+                }
+
+                if isSideStage == true then
+                    local stage = Spearhead.classes.stageClasses.Stages.ExtraStage.New(database, stageConfig, stagelogger, initData)
+                    stage:AddStageCompleteListener(OnStageCompleteListener)
+
+                    if SideStageByIndex[tostring(orderNumber)] == nil then SideStageByIndex[tostring(orderNumber)] = {} end
+                    table.insert(SideStageByIndex[tostring(orderNumber)], stage) 
+                else 
+                    local stage = Spearhead.classes.stageClasses.Stages.PrimaryStage.New(database, stageConfig, stagelogger, initData)
+                    stage:AddStageCompleteListener(OnStageCompleteListener)
+                    
+                    if StagesByIndex[tostring(orderNumber)] == nil then StagesByIndex[tostring(orderNumber)] = {} end
+                    table.insert(StagesByIndex[tostring(orderNumber)], stage) 
+                end 
+            end
+        end
+
+        if Spearhead.Util.startswith(stageName, "waitingstage", true) then
+            local valid = true
+
+            local split = Spearhead.Util.split_string(stageName, "_")
+
+            if Spearhead.Util.tableLength(split) < 3 then
+                Spearhead.AddMissionEditorWarning("Stage zone with name " .. stageName .. " does not have a order number or valid format")
+                valid = false
+            end
+
+            if valid == true then
+                local stageIndexString = split[2]
+                local stageIndex = tonumber(stageIndexString)
+
+                if not stageIndex then
+                    Spearhead.AddMissionEditorWarning("Stage zone with name " .. stageName .. " does not have a valid order number")
+                    valid = false
+                end
+
+                local waitingSecondsString = split[3]
+                local waitingSeconds = tonumber(waitingSecondsString)
+                if not waitingSeconds then
+                    Spearhead.AddMissionEditorWarning("Waiting Stage zone with name " .. stageName .. " does not have a valid amount of seconds parameter")
+                    valid = false
+                end
+
+                if valid == true then 
+                    local stagelogger = Spearhead.LoggerTemplate:new(stageName, stageConfig.logLevel)
+
+                    ---@type WaitingStageInitData
+                    local initData = {
+                        stageDisplayName = "Waiting Stage " .. stageIndex,
+                        stageNumber =  stageIndex or -99,
+                        stageZoneName = stageName,
+                        waitingSeconds = waitingSeconds --[[@as integer]]
+                    }
+                    local waitingStage = Spearhead.classes.stageClasses.Stages.WaitingStage.New(database, stageConfig, stagelogger, initData)
+
+                    if WaitingStagesByIndex[tostring(stageIndex)] == nil then
+                        WaitingStagesByIndex[tostring(stageIndex)] = {}
+                    end
+                    table.insert(WaitingStagesByIndex[tostring(stageIndex)], waitingStage)
+
+                    waitingStage:AddStageCompleteListener(OnStageCompleteListener)
+                end
+            end
         end
     end
 
@@ -4809,7 +4924,7 @@ local ExtraStage = {}
 function ExtraStage.New(database, stageConfig, logger, initData)
 
     -- "Import"
-    local Stage = Spearhead.classes.stageClasses.Stages.__Stage
+    local Stage = Spearhead.classes.stageClasses.Stages.BaseStage.Stage
     setmetatable(ExtraStage, Stage)
 
     ExtraStage.__index = ExtraStage
@@ -4841,7 +4956,7 @@ function ExtraStage:OnStageNumberChanged(number)
         self:ActivateStage()
     end
 
-    if self.isComplete == true then
+    if self._isComplete == true then
         self:ActivateBlueStage()
     end
 
@@ -4856,6 +4971,117 @@ Spearhead.classes.stageClasses.Stages.ExtraStage = ExtraStage
 
 
 end --ExtraStage.lua
+do --PrimaryStage.lua
+
+---@class PrimaryStage : Stage
+local PrimaryStage = {}
+
+---comment
+---@param database Database
+---@param stageConfig StageConfig
+---@param logger any
+---@param initData StageInitData
+---@return PrimaryStage
+function PrimaryStage.New(database, stageConfig, logger, initData)
+
+    -- "Import"
+    local Stage = Spearhead.classes.stageClasses.Stages.BaseStage.Stage
+    setmetatable(PrimaryStage, Stage)
+    PrimaryStage.__index = PrimaryStage
+    setmetatable(PrimaryStage, {__index = Stage}) 
+    
+    local o = Stage.New(database, stageConfig, logger, initData, "primary") --[[@as PrimaryStage]]
+    return o 
+end
+
+if not Spearhead.classes then Spearhead.classes = {} end
+if not Spearhead.classes.stageClasses then Spearhead.classes.stageClasses = {} end
+if not Spearhead.classes.stageClasses.Stages then Spearhead.classes.stageClasses.Stages = {} end
+Spearhead.classes.stageClasses.Stages.PrimaryStage = PrimaryStage
+
+
+
+end --PrimaryStage.lua
+do --WaitingStage.lua
+
+---@class WaitingStage : Stage
+---@field private _waitTimeSeconds integer
+---@field private _startTime number
+local WaitingStage = {}
+
+
+---@class WaitingStageInitData : StageInitData
+---@field waitingSeconds integer
+local WaitingStageInitData = {}
+
+---comment
+---@param database Database
+---@param stageConfig StageConfig
+---@param logger any
+---@param initData WaitingStageInitData
+---@return WaitingStage
+function WaitingStage.New(database, stageConfig, logger, initData)
+
+    -- "Import"
+    local Stage = Spearhead.classes.stageClasses.Stages.BaseStage.Stage
+    setmetatable(WaitingStage, Stage)
+    WaitingStage.__index = WaitingStage
+    setmetatable(WaitingStage, {__index = Stage}) 
+    
+    local self = Stage.New(database, stageConfig, logger, initData, "primary") --[[@as WaitingStage]]
+    setmetatable(self, WaitingStage)
+
+    self._waitTimeSeconds = 5
+    if initData.waitingSeconds and initData.waitingSeconds > 5 then self._waitTimeSeconds  = initData.waitingSeconds end
+    self._startTime = nil
+
+    self.CheckContinuousAsync = function (self, time)
+        if self:IsComplete() then
+            self:NotifyComplete()
+            return nil
+        end
+
+        return time + 2
+    end
+
+    return self
+end
+
+
+function WaitingStage:ActivateStage()
+
+    self._logger:info("Starting Waiting Stage '" .. self.zoneName .. "' which will complete in about " .. self._waitTimeSeconds .. " seconds")
+
+    self._isActive = true
+    self._startTime = timer.getTime()
+    timer.scheduleFunction(self.CheckContinuousAsync, self, self._startTime + self._waitTimeSeconds)
+end
+
+function WaitingStage:IsComplete() 
+    if timer.getTime() > (self._startTime + self._waitTimeSeconds) then return true end
+    return false
+end
+
+function WaitingStage:OnStageNumberChanged()
+    self._logger:debug("Waiting Stage OnStageNumberChanged override")
+end
+
+function WaitingStage:MarkStage(stageColor)
+    self._logger:debug("Waiting Stage MarkStage override")
+end
+
+function WaitingStage:GetExpectedTime()
+    return self._startTime + self._waitTimeSeconds    
+end
+
+if not Spearhead.classes then Spearhead.classes = {} end
+if not Spearhead.classes.stageClasses then Spearhead.classes.stageClasses = {} end
+if not Spearhead.classes.stageClasses.Stages then Spearhead.classes.stageClasses.Stages = {} end
+Spearhead.classes.stageClasses.Stages.WaitingStage = WaitingStage
+
+
+
+end --WaitingStage.lua
 do --Stage.lua
 
 ---@alias StageColor
@@ -4885,8 +5111,8 @@ do --Stage.lua
 --- @field zoneName string
 --- @field stageName string
 --- @field stageNumber number
---- @field isActive boolean
---- @field protected isComplete boolean
+--- @field protected _isActive boolean
+--- @field protected _isComplete boolean
 --- @field protected _missionPriority MissionPriority
 --- @field protected _database Database
 --- @field protected _db StageData
@@ -4921,8 +5147,8 @@ function Stage.New(database, stageConfig, logger, initData, missionPriority)
 
     self.zoneName = initData.stageZoneName
     self.stageNumber = initData.stageNumber
-    self.isActive = false
-    self.isComplete = false
+    self._isActive = false
+    self._isComplete = false
     self.stageName = initData.stageDisplayName
     
     self.OnPostStageComplete = nil
@@ -5037,7 +5263,7 @@ end
 
 ---@return boolean
 function Stage:IsComplete()
-    if self.isComplete == true then return true end
+    if self._isComplete == true then return true end
 
     for i, mission in pairs(self._db.sams) do
         local state = mission:GetState()
@@ -5053,8 +5279,13 @@ function Stage:IsComplete()
         end
     end
 
-    self.isComplete = true
+    self._isComplete = true
     return true
+end
+
+---@return boolean
+function Stage:IsActive()
+    return self._isActive == true
 end
 
 ---comment
@@ -5167,7 +5398,7 @@ function Stage:MarkStage(stageColor)
 end
 
 function Stage:ActivateStage()
-    self.isActive = true;
+    self._isActive = true;
 
     pcall(function()
         self:MarkStage("RED")
@@ -5283,7 +5514,8 @@ end
 if not Spearhead.classes then Spearhead.classes = {} end
 if not Spearhead.classes.stageClasses then Spearhead.classes.stageClasses = {} end
 if not Spearhead.classes.stageClasses.Stages then Spearhead.classes.stageClasses.Stages = {} end
-Spearhead.classes.stageClasses.Stages.__Stage = Stage
+if not Spearhead.classes.stageClasses.Stages.BaseStage then Spearhead.classes.stageClasses.Stages.BaseStage = {} end
+Spearhead.classes.stageClasses.Stages.BaseStage.Stage = Stage
 
 
 
@@ -5292,37 +5524,6 @@ Spearhead.classes.stageClasses.Stages.__Stage = Stage
 
 
 end --Stage.lua
-do --PrimaryStage.lua
-
----@class PrimaryStage : Stage
-local PrimaryStage = {}
-
----comment
----@param database Database
----@param stageConfig StageConfig
----@param logger any
----@param initData StageInitData
----@return PrimaryStage
-function PrimaryStage.New(database, stageConfig, logger, initData)
-
-    -- "Import"
-    local Stage = Spearhead.classes.stageClasses.Stages.__Stage
-    setmetatable(PrimaryStage, Stage)
-    PrimaryStage.__index = PrimaryStage
-    setmetatable(PrimaryStage, {__index = Stage}) 
-    
-    local o = Stage.New(database, stageConfig, logger, initData, "primary") --[[@as PrimaryStage]]
-    return o 
-end
-
-if not Spearhead.classes then Spearhead.classes = {} end
-if not Spearhead.classes.stageClasses then Spearhead.classes.stageClasses = {} end
-if not Spearhead.classes.stageClasses.Stages then Spearhead.classes.stageClasses.Stages = {} end
-Spearhead.classes.stageClasses.Stages.PrimaryStage = PrimaryStage
-
-
-
-end --PrimaryStage.lua
 do --aliases.lua
 
 
@@ -5377,6 +5578,8 @@ if id == 0 then
 end
 
 local startTime = timer.getTime() * 1000
+
+Spearhead.Events.Init("DEBUG")
 
 local dbLogger = Spearhead.LoggerTemplate:new("database", "INFO")
 local standardLogger = Spearhead.LoggerTemplate:new("", "INFO")
