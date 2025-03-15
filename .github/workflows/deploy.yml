@@ -1,36 +1,73 @@
 # This is a basic workflow to help you get started with Actions
 
-name: CI
+name: deploy pages
 
 # Controls when the workflow will run
 on:
-  # Triggers the workflow on push or pull request events but only for the "main" branch
   push:
-    branches: [ "main" ]
-  pull_request:
     branches: [ "main" ]
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  # This workflow contains a single job called "build"
-  build:
-    # The type of runner that the job will run on
+  build-self:
     runs-on: ubuntu-latest
-
-    # Steps represent a sequence of tasks that will be executed as part of the job
-    steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+    steps: 
       - uses: actions/checkout@v4
+      - name: Build with Jekyll
+        uses: actions/jekyll-build-pages@v1
+        with:
+          source: ./
+          destination: ./_site
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
 
-      # Runs a single command using the runners shell
-      - name: Run a one-line script
-        run: echo Hello, world!
+      
+  # build-spearhead:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Check out spearhead
+  #       uses: actions/checkout@master
+  #       with:
+  #         repository: orgname/reponame
+  #         token: ${{ secrets.my_pat }}
 
-      # Runs a set of commands using the runners shell
-      - name: Run a multi-line script
-        run: |
-          echo Add other actions to build,
-          echo test, and deploy your project.
+  #     - run: |
+  #         mkdir -p ./result
+  #       name: create result folder  
+
+  #     - 
+
+  lua-course:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out spearhead
+        uses: actions/checkout@master
+        with:
+          repository: dutchie032/DCSLuaCourse
+          token: ${{ secrets.my_pat }}
+      - run: ls -R .
+
+  package:
+    needs: 
+      - build-self
+      - lua-course
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "temp"
+
+  deploy:
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    runs-on: ubuntu-latest
+    needs: package
+    environment:
+      name: github-pages
+      url: ${{steps.deployment.outputs.page_url}}
+    steps:
+      - name: Deploy artifact
+        id: deployment
+        uses: actions/deploy-pages@v4
