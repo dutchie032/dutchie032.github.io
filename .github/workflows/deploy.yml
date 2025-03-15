@@ -19,7 +19,7 @@ jobs:
         uses: actions/checkout@master
         with:
           repository: dutchie032/DCSLuaCourse
-          token: ${{ secrets.my_pat }}\
+          token: ${{ secrets.my_pat }}
           path: ./lua-course
 
 
